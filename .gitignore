@@ -1,1 +1,12 @@
+# Airflow & Docker
+logs/
+plugins/
+postgres_data/
+airflow.cfg
+airflow.db
+standalone_admin_password.txt
+.env
 
+# Python
+__pycache__/
+*.pyc
