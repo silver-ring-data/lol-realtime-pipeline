@@ -10,3 +10,8 @@ standalone_admin_password.txt
 # Python
 __pycache__/
 *.pyc
+
+# 데이터 파일 제외
+data/*.json
+data/*.csv
+!data/sample_chat.json  # 샘플 파일만 예외적으로 허용하고 싶을 때

@@ -1,3 +1,7 @@
+'''
+pip install chzzk-sdk
+'''
+
 import os
 from datetime import datetime
 import boto3
@@ -10,7 +14,7 @@ class Config:
     START_DATE = datetime(2026, 4, 15)
     
     # 2. 운영 변수 (중앙 제어)
-    MATCH_ID = "LCK_2026_T1_GEN"
+    MATCH_ID = "WORLDS_2024_FINAL_T1_BLG"
     
     # 3. 연결 정보 (도커 환경변수 혹은 Airflow Conn ID)
     DB_CONN_ID = 'postgres_db_eunbee'
