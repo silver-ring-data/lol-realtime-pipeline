@@ -1,10 +1,27 @@
 import json
 import time
 import requests
+import logging
 
 # 1. 설정: 127.0.0.1로 명확히 지정해서 404 에러 원천 차단!
-API_URL = "http://127.0.0.1:8000/api/chat"  
-DATA_FILE = "sample_data/t1_blg_chat.jsonl"  # 은비 환경에 맞게 경로 맞춰줘
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] 채팅봇: %(message)s')
+logger = logging.getLogger("ChatProducer")
+API_URL = "http://api-server:8000/source/chat"
+DATA_FILE = "data/t1_blg_chat.jsonl"  # 은비 환경에 맞게 경로 맞춰줘
+
+def wait_for_server():
+    """서버가 완전히 켜질 때까지 헬스체크를 보내며 대기해!"""
+    health_url = API_URL.replace("/source/chat", "/")
+    logger.info(f"⏳ 서버 접속 시도 중... ({health_url})")
+    while True:
+        try:
+            response = requests.get(health_url, timeout=2)
+            if response.status_code == 200:
+                logger.info("✅ 서버 연결 성공! 데이터를 쏘기 시작합니다.")
+                break
+        except requests.exceptions.ConnectionError:
+            pass
+        time.sleep(2)
 
 def run_chat_producer():
     # 2. 데이터 불러오기 (JSON Lines 형식 완벽 지원)
@@ -58,4 +75,5 @@ def run_chat_producer():
         prev_time = current_time
 
 if __name__ == "__main__":
+    wait_for_server()
     run_chat_producer()
