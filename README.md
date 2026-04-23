@@ -1,3 +1,4 @@
+```
 lol-realtime-pipeline/
 ├── data_source/
 │   ├── api_server/
@@ -18,3 +19,4 @@ lol-realtime-pipeline/
 │   ├── gol_gg_scraper.py
 │   └── ...
 └── docker-compose.yml
+```
