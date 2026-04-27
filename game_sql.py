@@ -33,25 +33,20 @@ st_env.execute_sql("""
 
 # 4. 실버 게임 스트림 생성 (Sink)
 # 브론즈와 컬럼 타입/순서를 완벽하게 일치시킴 (minions_killed 포함)
+
 st_env.execute_sql("""
     CREATE TABLE IF NOT EXISTS slv_game_strm (
-        `match_id` STRING,
+        match_id STRING,
         `timestamp` BIGINT,
-        `participant_frames` MAP<STRING, ROW<`total_gold` INT, `minions_killed` INT>>, 
-        `events` ARRAY<ROW<
-            `timestamp` BIGINT,
-            `event_type` STRING,
-            `killer_id` INT,
-            `assisting_participant_ids` ARRAY<INT>,
-            `victim_id` INT,
-            `team_id` INT
-        >>
+        participant_frames MAP<STRING, ROW<total_gold INT, minions_killed INT>>,
+        events ARRAY<ROW<`timestamp` BIGINT, `event_type` STRING, `killer_id` INT, `assisting_participant_ids` ARRAY<INT>, `victim_id` INT, `team_id` INT>>,
+        row_time AS TO_TIMESTAMP(FROM_UNIXTIME(`timestamp` / 1000)),
+        WATERMARK FOR row_time AS row_time - INTERVAL '5' SECOND
     ) WITH (
         'connector' = 'kinesis',
         'stream' = 'lol-highlighter-dev-an2-kds-slv-game',
         'aws.region' = 'ap-northeast-2',
-        'format' = 'json',
-        'sink.partitioner-field-delimiter' = ''
+        'format' = 'json'
     )
 """)
 
