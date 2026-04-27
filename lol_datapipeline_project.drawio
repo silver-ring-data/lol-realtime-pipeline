@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Whale/4.36.368.16 Safari/537.36">
   <diagram name="페이지-1" id="Vvz8UXlUXGKU84N9EsJY">
-    <mxGraphModel dx="1288" dy="1828" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="3433" dy="2926" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -253,7 +253,7 @@
         <mxCell id="9MYD0wOS3AA9z5T9MnyD-22" connectable="0" parent="9MYD0wOS3AA9z5T9MnyD-18" style="group" value="" vertex="1">
           <mxGeometry height="30" width="150" x="15.5" as="geometry" />
         </mxCell>
-        <mxCell id="9MYD0wOS3AA9z5T9MnyD-23" parent="9MYD0wOS3AA9z5T9MnyD-22" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Refined Raw Data (Flink Refined)" vertex="1">
+        <mxCell id="9MYD0wOS3AA9z5T9MnyD-23" parent="9MYD0wOS3AA9z5T9MnyD-22" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Refined Raw Data (Parquet)" vertex="1">
           <mxGeometry height="30" width="104" x="46" as="geometry" />
         </mxCell>
         <mxCell id="9MYD0wOS3AA9z5T9MnyD-24" parent="9MYD0wOS3AA9z5T9MnyD-22" style="sketch=0;pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;fillColor=light-dark(#808080,#A8A8A8);labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;outlineConnect=0;align=center;shape=mxgraph.office.concepts.folder_open;" value="" vertex="1">
@@ -262,13 +262,13 @@
         <mxCell id="4ksNu2POiOPUc7DSgA5_-77" connectable="0" parent="4ksNu2POiOPUc7DSgA5_-33" style="group" value="" vertex="1">
           <mxGeometry height="30" width="140" x="103" y="313" as="geometry" />
         </mxCell>
-        <mxCell id="4ksNu2POiOPUc7DSgA5_-78" parent="4ksNu2POiOPUc7DSgA5_-77" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;Raw Data(.json) (Kinesis Direct)&lt;/span&gt;" vertex="1">
+        <mxCell id="4ksNu2POiOPUc7DSgA5_-78" parent="4ksNu2POiOPUc7DSgA5_-77" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;Raw Data&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;(.json)&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="30" width="94" x="46" as="geometry" />
         </mxCell>
         <mxCell id="4ksNu2POiOPUc7DSgA5_-79" parent="4ksNu2POiOPUc7DSgA5_-77" style="sketch=0;pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;fillColor=light-dark(#8D8563,#A8A8A8);labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;outlineConnect=0;align=center;shape=mxgraph.office.concepts.folder_open;" value="" vertex="1">
           <mxGeometry height="30" width="46" as="geometry" />
         </mxCell>
-        <mxCell id="4ksNu2POiOPUc7DSgA5_-98" parent="4JuFgsn7WVCx8vw98VlS-1" style="swimlane;startSize=40;html=1;fillColor=light-dark(#A8911B,#808080);" value="&lt;span style=&quot;font-size: 19px;&quot;&gt;Serving&lt;/span&gt;" vertex="1">
+        <mxCell id="4ksNu2POiOPUc7DSgA5_-98" parent="4JuFgsn7WVCx8vw98VlS-1" style="swimlane;startSize=40;html=1;fillColor=light-dark(#FFFFFF,#808080);" value="&lt;span style=&quot;font-size: 19px;&quot;&gt;Serving&lt;/span&gt;" vertex="1">
           <mxGeometry height="1160" width="360" x="2560" y="20" as="geometry" />
         </mxCell>
         <mxCell id="4ksNu2POiOPUc7DSgA5_-102" parent="4ksNu2POiOPUc7DSgA5_-98" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticsearch_service;" value="Open Search" vertex="1">
