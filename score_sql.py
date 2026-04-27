@@ -37,7 +37,7 @@ MATCH_OFFSETS = {
 # ⚙️ 2. SQL 구문 자동 생성
 # ==========================================
 event_case = "\n".join([f"WHEN G.event_type = '{k}' THEN {v}" for k, v in EVENT_WEIGHTS.items()])
-chat_case = "\n".join([f"WHEN COUNT(C.content) >= {count} THEN {score}" for count, score in CHAT_LEVELS])
+chat_case = "\n".join([f"WHEN COUNT(C.clean_msg) >= {count} THEN {score}" for count, score in CHAT_LEVELS])
 # 싱크 보정을 위한 오프셋 구문
 offset_logic = "\n".join([f"WHEN match_id = '{k}' THEN {v}" for k, v in MATCH_OFFSETS.items()])
 
@@ -50,11 +50,16 @@ offset_logic = "\n".join([f"WHEN match_id = '{k}' THEN {v}" for k, v in MATCH_OF
 calculation_logic = f"""
     SELECT 
         G.match_id,
-        -- 게임 시간 보정 (오프셋 반영)
         HOP_START(G.row_time, INTERVAL '{SLIDE_STEP}' SECOND, INTERVAL '{WINDOW_SIZE}' SECOND) as window_start,
-        COALESCE(SUM(CASE {event_case} ELSE 0 END), 0) as event_score,
+        -- 이제 G.event_type이 아니라 E.event_type으로 접근!
+        COALESCE(SUM(CASE 
+            {event_case.replace('G.event_type', 'E.event_type')} 
+            ELSE 0 
+        END), 0) as event_score,
         CASE {chat_case} ELSE 0 END as chat_score
     FROM slv_game_strm G
+    -- 보따리(Array)를 풀어서 각 이벤트를 행으로 변환!
+    CROSS JOIN UNNEST(G.events) AS E (`timestamp`, `event_type`, `killer_id`, `assisting_participant_ids`, `victim_id`, `team_id`)
     LEFT JOIN slv_chat_strm C ON 
         C.row_time BETWEEN G.row_time - INTERVAL '{CHAT_LOOKBACK}' SECOND 
                        AND G.row_time + INTERVAL '{CHAT_LOOKAHEAD}' SECOND
@@ -64,6 +69,7 @@ calculation_logic = f"""
 """
 
 # 최종 쿼리 (비율 계산 및 타입 변환)
+# 최종 쿼리 및 실행은 은비가 짠 로직 그대로 가도 좋아! (AS T 잊지 않았지? 😉)
 final_query = f"""
     SELECT 
         match_id,
