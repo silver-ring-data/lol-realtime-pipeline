@@ -28,17 +28,17 @@ st_env.execute_sql("""
 # 3. 실버 채팅 스트림 (to Kinesis)
 st_env.execute_sql("""
     CREATE TABLE IF NOT EXISTS slv_chat_strm (
-        `nickname` STRING,
-        `clean_msg` STRING,
-        `platform` STRING,
-        `timestamp` BIGINT
-        
+        nickname STRING,
+        clean_msg STRING,
+        platform STRING,
+        `timestamp` BIGINT,
+        row_time AS TO_TIMESTAMP(FROM_UNIXTIME(`timestamp` / 1000)),
+        WATERMARK FOR row_time AS row_time - INTERVAL '5' SECOND
     ) WITH (
         'connector' = 'kinesis',
-        'stream' = 'lol-highlighter-dev-an2-kds-slv-chat',  -- 실버 전용 스트림
+        'stream' = 'lol-highlighter-dev-an2-kds-slv-chat',
         'aws.region' = 'ap-northeast-2',
-        'format' = 'json',
-        'sink.partitioner-field-delimiter' = ''
+        'format' = 'json'
     )
 """)
 
