@@ -1,7 +1,7 @@
 %flink.pyflink
 
 # ==========================================
-# ⚙️ 1. 환경 설정 및 점수 기준 (최상단 배치 완벽!)
+# ⚙️ 1. 환경 설정 및 점수 기준 
 # ==========================================
 st_env.get_config().get_configuration().set_string("table.exec.source.idle-timeout", "5000 ms")
 st_env.get_config().get_configuration().set_string("execution.checkpointing.interval", "60000")
@@ -22,50 +22,45 @@ CHAT_LEVELS = [
     (100, 100), (90, 90), (80, 80), (70, 70), (60, 60), 
     (50, 50), (40, 40), (30, 30), (20, 20), (10, 10)
 ]
-MATCH_OFFSETS = {"worlds_2024_20241102_t1_blg_g4": 55000, "worlds_2024_20241102_t1_blg_g5": 3182000}
 
-# SQL 로직 변수 생성
-event_case = "\n".join([f"WHEN event_type = '{k}' THEN {v}" for k, v in EVENT_WEIGHTS.items()])
+# 🌟 오프셋(MATCH_OFFSETS) 변수는 과감하게 삭제!
 chat_case = "\n".join([f"WHEN SUM(c_count) >= {count} THEN {score}" for count, score in CHAT_LEVELS])
-offset_logic = "\n".join([f"WHEN match_id = '{k}' THEN {v}" for k, v in MATCH_OFFSETS.items()])
 
 # ==========================================
 # 🥉 2. 테이블 초기화 및 재정의
 # ==========================================
-# (1) 게임 데이터 소스 (proc_time 추가)
-st_env.execute_sql(f"""
+# (1) 🎮 게임 데이터 소스 (복잡한 adjusted_time 제거!)
+st_env.execute_sql("""
     CREATE TABLE IF NOT EXISTS brz_game_tbl (
         `match_id` STRING,
         `timestamp` BIGINT,
         `events` ARRAY<ROW<`timestamp` BIGINT, `event_type` STRING, `killer_id` INT, 
                            `assisting_participant_ids` ARRAY<INT>, `victim_id` STRING, `team_id` INT>>,
         join_key AS CAST(1 AS INT),
-        adjusted_time AS TO_TIMESTAMP(FROM_UNIXTIME((`timestamp` + CAST((CASE {offset_logic} ELSE 0 END) AS BIGINT)) / 1000)),
-        WATERMARK FOR adjusted_time AS adjusted_time - INTERVAL '5' SECOND,
-        proc_time AS PROCTIME()  -- 🌟 시스템 현재 시간 컬럼 추가!
+        row_time AS TO_TIMESTAMP(FROM_UNIXTIME(`timestamp` / 1000)), -- 🌟 봇이 쏴준 현재 시간을 그대로 사용!
+        WATERMARK FOR row_time AS row_time - INTERVAL '5' SECOND,
+        proc_time AS PROCTIME() 
     ) WITH (
         'connector' = 'kinesis', 'stream' = 'de-ai-05-lol-dev-an2-kds-brz-game',
         'aws.region' = 'ap-northeast-2', 'scan.stream.initpos' = 'LATEST', 'format' = 'json'
     )
 """)
 
-# (2) 채팅 데이터 소스 (proc_time 추가)
+# (2) 💬 채팅 데이터 소스 (변동 없음)
 st_env.execute_sql("""
     CREATE TABLE IF NOT EXISTS brz_chat_tbl (
         `timestamp` BIGINT, `nickname` STRING, `content` STRING,
         join_key AS CAST(1 AS INT),
         row_time AS TO_TIMESTAMP(FROM_UNIXTIME(`timestamp` / 1000)),
         WATERMARK FOR row_time AS row_time - INTERVAL '5' SECOND,
-        proc_time AS PROCTIME()  -- 🌟 시스템 현재 시간 컬럼 추가!
+        proc_time AS PROCTIME() 
     ) WITH (
         'connector' = 'kinesis', 'stream' = 'de-ai-05-lol-dev-an2-kds-brz-chat',
         'aws.region' = 'ap-northeast-2', 'scan.stream.initpos' = 'LATEST', 'format' = 'json'
     )
 """)
 
-
-
-# (3) S3 골드 싱크 (롤링 정책 유지)
+# (3) 🥇 S3 골드 싱크 (변동 없음)
 st_env.execute_sql("""
     CREATE TABLE IF NOT EXISTS gld_s3_score_tbl (
         match_id STRING, window_start TIMESTAMP(3),
@@ -81,12 +76,11 @@ st_env.execute_sql("""
     )
 """)
 
-
 # ==========================================
 # 🌟 3. 통합 연산 로직 (시간 핀포인트 타겟팅!)
 # ==========================================
 unified_stream = f"""
-    -- 1. 채팅 데이터 (match_id는 조인 대신 여기서 NULL 처리)
+    -- 1. 채팅 데이터
     SELECT 
         CAST(NULL AS STRING) as match_id, 
         C.row_time as ts, 
@@ -97,11 +91,10 @@ unified_stream = f"""
     
     UNION ALL
     
-    -- 2. 🌟 게임 하트비트 (핵심!)
-    -- 이벤트가 없어도 1초마다 들어오는 이 데이터가 match_id를 멱살 잡고 끌고 옵니다.
+    -- 2. 🌟 게임 하트비트
     SELECT 
         match_id, 
-        adjusted_time as ts, 
+        row_time as ts,  -- 🌟 adjusted_time 대신 깔끔하게 row_time 사용!
         CAST(0 AS DOUBLE) as e_score, 
         0 as c_count
     FROM brz_game_tbl
@@ -111,7 +104,7 @@ unified_stream = f"""
     -- 3. 게임 이벤트 데이터
     SELECT 
         match_id, 
-        TO_TIMESTAMP(FROM_UNIXTIME((E.e_ts + CAST((CASE {offset_logic} ELSE 0 END) AS BIGINT)) / 1000)) as ts, 
+        TO_TIMESTAMP(FROM_UNIXTIME(E.e_ts / 1000)) as ts, -- 🌟 복잡한 오프셋 싹 걷어내고 순수 알맹이 시간(E.e_ts) 바로 적용!
         CAST(CASE 
             WHEN event_type = 'CHAMPION_KILL' THEN {EVENT_WEIGHTS['CHAMPION_KILL']}
             WHEN event_type = 'ELITE_MONSTER' AND victim_id LIKE '%BARON%' THEN {EVENT_WEIGHTS['BARON_NASHOR']}
@@ -133,14 +126,11 @@ unified_stream = f"""
 st_env.execute_sql(f"""
     INSERT INTO gld_s3_score_tbl
     SELECT 
-        -- 🌟 포인트 2: 10초 윈도우 안에 섞여 들어온 게임 데이터에서 match_id를 뽑아냄! 
-        -- 만약 게임 이벤트가 하나도 없는 조용한 10초라면 'live_match'라는 폴더에 저장하게 예외 처리 (S3 에러 방지)
         COALESCE(MAX(match_id), 'live_match') as match_id,
         HOP_START(ts, INTERVAL '3' SECOND, INTERVAL '10' SECOND) as window_start,
         SUM(e_score) as event_score,
         CASE {chat_case} ELSE 0 END as chat_score,
         (SUM(e_score) * 0.6 + (CASE {chat_case} ELSE 0 END) * 0.4) as final_score
     FROM ({unified_stream})
-    -- 🌟 포인트 3: match_id를 빼고 오직 '시간(HOP)'으로만 평등하게 그룹핑!
     GROUP BY HOP(ts, INTERVAL '3' SECOND, INTERVAL '10' SECOND)
 """)
