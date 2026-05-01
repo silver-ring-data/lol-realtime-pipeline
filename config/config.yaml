@@ -1,0 +1,70 @@
+# lol-highlighter AWS Infrastructure Configuration (v1.2)
+# Updated based on Academy Naming Convention: {user_id}-{project}-{env}-{region_abbr}-{service}-{tier}-{data}
+
+global:
+  user_id: &user_id de-ai-05
+  project: &project lol
+  env: &env dev
+  region: &region ap-northeast-2
+  region_abbr: &an2 an2
+
+resources:
+  ingestion_streaming:
+    kinesis_data_streams:
+      # Bronze: Raw data directly from producers
+      chat_brz: "de-ai-05-lol-dev-an2-kds-brz-chat"
+      game_brz: "de-ai-05-lol-dev-an2-kds-brz-game"
+      # Silver: Refined data after Flink cleansing
+      #chat_slv: "de-ai-05-lol-dev-an2-kds-slv-chat"
+      #game_slv: "de-ai-05-lol-dev-an2-kds-slv-game"
+      # Gold: Final highlight scores for serving
+      #score_gld: "de-ai-05-lol-dev-an2-kds-gld-score"
+
+    kinesis_data_firehose:
+      # Direct delivery from KDS to S3 Data Lake
+      chat_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-chat"
+      game_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-game"
+      #chat_slv_to_s3: "de-ai-05-lol-dev-an2-kdf-slv-chat"
+      #score_gld_to_s3: "de-ai-05-lol-dev-an2-kdf-gld-score"
+
+  processing:
+    # Managed Flink (Kinesis Data Analytics)
+    flink_app: "de-ai-05-lol-dev-an2-flink-analyzer"
+    studio_notebook: "de-ai-05-lol-dev-an2-stdo-analyzer"
+    glue_db: "de_ai_05_lol_dev_an2_glue_db" # DB명은 하이픈(-) 대신 언더바(_) 권장
+
+  storage_serving:
+    # Data Lake (S3)
+    s3_bucket: "de-ai-05-lol-an2-s3-datalake"
+    # Real-time Serving (PostgreSQL) - 하이라이트 점수 및 통계용
+    # rds_postgres: "de-ai-05-lol-dev-an2-rds-db"
+    # Search & Visualization (OpenSearch) - 정제된 채팅 검색용
+    opensearch: "de-ai-05-lol-dev-an2-os-srsh" # 28자 제한
+    # id : de-ai-05-master
+    # pw : Asdfqwer1234!
+
+  analytics:
+    # SQL based analysis on S3
+    athena_workgroup: "de-ai-05-lol-dev-an2-athena-wg"
+# 🎯 [핵심] 현재 어떤 경기를 시뮬레이션할지 여기서만 선택!
+app_context:
+  active_match_key: "worlds_2024_final" # 아래 'matches'에 등록된 키값
+  active_set: "g4"                      # g4 또는 g5
+
+# 📚 경기 저장소: 새로운 경기가 추가될 때마다 여기에 계속 덧붙이면 돼!
+matches:
+  worlds_2024_final:
+    metadata:
+      tournament: "worlds_2024"
+      match_date: "20241102"
+      teams: "t1_blg"
+    data:
+      local_path: "./data"
+      chat_source: "t1_blg_chat.jsonl"  # 채팅은 통파일
+      game_sets:
+          g4:
+            file_name: "t1_blg_g4_exact.json"
+            wait_seconds: 55
+          g5:
+            file_name: "t1_blg_g5_exact.json"
+            wait_seconds: 3182
