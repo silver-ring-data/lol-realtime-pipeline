@@ -11,21 +11,20 @@ global:
 resources:
   ingestion_streaming:
     kinesis_data_streams:
-      # Bronze: Raw data directly from producers
+      # --- Bronze Layer
       chat_brz: "de-ai-05-lol-dev-an2-kds-brz-chat"
       game_brz: "de-ai-05-lol-dev-an2-kds-brz-game"
-      # Silver: Refined data after Flink cleansing
-      #chat_slv: "de-ai-05-lol-dev-an2-kds-slv-chat"
-      #game_slv: "de-ai-05-lol-dev-an2-kds-slv-game"
-      # Gold: Final highlight scores for serving
-      #score_gld: "de-ai-05-lol-dev-an2-kds-gld-score"
+      # --- Gold Layer
+      chat_gld: "de-ai-05-lol-dev-an2-kds-gld-chat"
+      score_gld: "de-ai-05-lol-dev-an2-kds-gld-score"
+      
+
 
     kinesis_data_firehose:
       # Direct delivery from KDS to S3 Data Lake
       chat_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-chat"
       game_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-game"
-      #chat_slv_to_s3: "de-ai-05-lol-dev-an2-kdf-slv-chat"
-      #score_gld_to_s3: "de-ai-05-lol-dev-an2-kdf-gld-score"
+
 
   processing:
     # Managed Flink (Kinesis Data Analytics)
@@ -33,16 +32,33 @@ resources:
     studio_notebook: "de-ai-05-lol-dev-an2-stdo-analyzer"
     glue_db: "de_ai_05_lol_dev_an2_glue_db" # DB명은 하이픈(-) 대신 언더바(_) 권장
 
+    # 🚀 [New] 통합 배달부 람다 추가
+    os_loader_lambda: "de-ai-05-lol-dev-an2-lmd-gld-os-loader"
+    # 트리거 연결
+
   storage_serving:
     # Data Lake (S3)
     s3_bucket: "de-ai-05-lol-an2-s3-datalake"
-    # Real-time Serving (PostgreSQL) - 하이라이트 점수 및 통계용
-    # rds_postgres: "de-ai-05-lol-dev-an2-rds-db"
     # Search & Visualization (OpenSearch) - 정제된 채팅 검색용
     opensearch: "de-ai-05-lol-dev-an2-os-srsh" # 28자 제한
     # id : de-ai-05-master
     # pw : Asdfqwer1234!
-
+    # 정책 가져오기(json)
+    # {
+    #   "Version": "2012-10-17",
+    #   "Statement": [
+    #     {
+    #       "Effect": "Allow",
+    #       "Principal": {
+    #         "AWS": "*"
+    #       },
+    #       "Action": "es:*",
+    #       "Resource": "arn:aws:es:ap-northeast-2:827913617635:domain/de-ai-05-lol-dev-an2-os-srsh/*"
+    #     }
+    #   ]
+    # }
+    # opensearch dashboard에 접속하고 security -> roles
+    
   analytics:
     # SQL based analysis on S3
     athena_workgroup: "de-ai-05-lol-dev-an2-athena-wg"
