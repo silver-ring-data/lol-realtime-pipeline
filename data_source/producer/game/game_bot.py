@@ -98,7 +98,22 @@ def run_game_producer():
         
         for idx, frame in enumerate(game_data):
             frame['match_id'] = match_id
-            frame['ingame_timestamp_ms'] = int(time.time() * 1000) 
+            
+            # 🌟 1. 껍데기 시간(프레임 시간) 현재로 덮어쓰기!
+            current_now = int(time.time() * 1000)
+            frame['timestamp'] = current_now
+            frame['ingame_timestamp_ms'] = current_now
+            
+            # 🌟 2. 알맹이 시간 덮어쓰기 + victim_id 문자열로 강제 변환! (여기 집중!)
+            if 'events' in frame:
+                for event in frame['events']:
+                    event['timestamp'] = current_now 
+                    
+                    # 💥 Flink가 STRING으로 기다리니까, 숫자든 뭐든 무조건 문자로 바꿔서 쏘기!
+                    if 'victim_id' in event and event['victim_id'] is not None:
+                        event['victim_id'] = str(event['victim_id'])
+            
+            frame_str = json.dumps(frame, ensure_ascii=False) + "\n"
             
             frame_str = json.dumps(frame, ensure_ascii=False) + "\n"
             

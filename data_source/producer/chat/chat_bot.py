@@ -76,7 +76,7 @@ def run_chat_producer():
         try:
             # 💡 Flink 연동을 위한 필수 데이터 추가 (match_id, 실시간 타임스탬프)
             chat['match_id'] = MATCH_ID
-            chat['timestamp_ms'] = int(time.time() * 1000)
+            chat['timestamp'] = int(time.time() * 1000)  # 🌟 정답! 기존 timestamp를 진짜 현재 시간으로 덮어쓰기!
             
             chat_str = json.dumps(chat, ensure_ascii=False) + "\n"  
             
