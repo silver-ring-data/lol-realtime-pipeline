@@ -1,24 +1,33 @@
-#version: '3.8'
+# version: '3.8'
 x-airflow-common: &airflow-common
+  
   image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.0}
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-pytchat requests pytchat requests apache-airflow-providers-amazon}
+    # --- [은비의 요청!] .env 파일의 AWS 정보를 Airflow 시스템 변수로 주입 ---
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+    TZ: 'Asia/Seoul'
+    AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: 'Asia/Seoul'
+    # ------------------------------------------------------------------
+    _PIP_ADDITIONAL_REQUIREMENTS: 'pytchat requests apache-airflow-providers-amazon boto3 pyyaml'
   volumes:
-    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
-    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
-    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
-    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    # --- [은비의 구조 반영!] 호스트의 airflow/dags 폴더를 컨테이너에 연결 ---
+    - ./airflow/dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config:/opt/airflow/config
+    - ./plugins:/opt/airflow/plugins
+    - ./data_source:/opt/airflow/data_source
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:
       condition: service_healthy
 
 services:
-  # Airflow 메타데이터 저장용 (이건 Airflow 구동에 필수라 남겨둬야 해!)
   postgres:
     image: postgres:13
     container_name: lol-airflow-db
@@ -27,67 +36,27 @@ services:
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
       retries: 5
 
   airflow-webserver:
     <<: *airflow-common
     command: webserver
+    container_name: lol-airflow-webserver
     ports:
       - "8080:8080"
-    restart: always
-    container_name: lol-airflow-webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
-    restart: always
     container_name: lol-airflow-scheduler
-
-  # 우리 데이터의 입구! API 서버
-  api-server:
-    build:
-      context: ./data_source/api_server
-    ports:
-      - "8000:8000"
-    environment:
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
-    container_name: lol-api-server
-    #healthcheck: # 서버 상태 체크 기능 추가!
-    #  test: ["CMD", "curl", "-f", "http://localhost:8000/"]
-    #  interval: 10s
-    #  retries: 5
-    volumes:
-      - ./data_source/api_server:/app
-    # 💡 uvicorn의 --reload 옵션을 켜두면, 코드가 바뀔 때마다 서버가 스스로 껐다 켜져!
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# 1번 손님: 채팅 데이터를 쏴주는 봇
-  chat-producer:
-    build:
-      context: ./data_source/producer/chat  # 채팅 봇 전용 폴더
-    depends_on:
-      - api-server
-    environment:
-      - API_URL=http://api-server:8000/source/chat
-    container_name: lol-chat-producer
-    volumes:
-      - ./data_source/producer/chat:/app
-
-  # 2번 손님: 인게임 지표를 쏴주는 봇
-  game-producer:
-    build:
-      context: ./data_source/producer/game  # 게임 봇 전용 폴더
-    depends_on:
-      - api-server
-    environment:
-      - API_URL=http://api-server:8000/source/game
-    container_name: lol-game-producer
-    volumes:
-      - ./data_source/producer/game:/app
 
   airflow-init:
     <<: *airflow-common

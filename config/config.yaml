@@ -20,17 +20,42 @@ resources:
       
 
 
-    kinesis_data_firehose:
-      # Direct delivery from KDS to S3 Data Lake
+    kinesis_data_firehose: # Dynamic Partitioning
+      # --- 💬 채팅 데이터 (Dynamic Partitioning 적용)
       chat_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-chat"
-      game_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-game"
+      # Prefix: bronze/chat/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
+      # Error : bronze/errors/chat/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
+      # Buffer hints (버퍼 힌트) : 크기 1MB, 간격 60초
 
+      # --- 🎮 게임 데이터 (Dynamic Partitioning 적용)
+      game_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-game"
+      # Prefix: bronze/game/match_id=!{partitionKeyFromQuery:match_id}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
+      # Error : bronze/errors/game/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
+      # Buffer hints (버퍼 힌트) : 크기 1MB, 간격 60초
+
+      # Dynamic Partitioning: Enabled로 체크!
+      # Multi-record de-aggregation: Disabled (우리 봇은 1개씩 쏘니까 상관없어).
+      # New partition key:
+      # Key 이름: match_id
+      # JQ query: .match_id (우리 봇이 보내는 JSON 안에 match_id 필드가 있으니까!)
+      # S3 bucket prefix: 위에서 우리가 정한 match_id=...가 포함된 경로를 그대로 입력!
 
   processing:
     # Managed Flink (Kinesis Data Analytics)
     flink_app: "de-ai-05-lol-dev-an2-flink-analyzer"
     studio_notebook: "de-ai-05-lol-dev-an2-stdo-analyzer"
     glue_db: "de_ai_05_lol_dev_an2_glue_db" # DB명은 하이픈(-) 대신 언더바(_) 권장
+    athena_db: "de_ai_05_lol_dev_an2_glue_db"
+    # 🌟 Glue Job (우리가 이름 바꾼 그 녀석!)
+    glue_job_refiner: "de-ai-05-lol-dev-an2-glue-slv-refiner"
+    # TYPE          : Spark
+    # Language      : python 3
+    # glue version  : 가장 높은거
+    # Worker type   : G.1X
+    # Requested     : 2
+    # Job timeout   : 15 (min)
+    # retries       : 0
+
 
     # 🚀 [New] 통합 배달부 람다 추가
     os_loader_lambda: "de-ai-05-lol-dev-an2-lmd-gld-os-loader"
