@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>LoL 2D 응원석 (최종 통합본) 🏟️</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="stadium-wrapper">
+    <div class="main-stage">
+        <div class="side-gauge left">
+            <div class="gauge-fill" id="left-gauge" style="height: 70%; background: #0096ff;"></div>
+        </div>
+
+        <div class="screen-area">
+            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/NsWPXB5Wqzs?start=13830&autoplay=1&mute=1" 
+                    title="YouTube video player" frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen></iframe>
+        </div>
+
+        <div class="side-gauge right">
+            <div class="gauge-fill" id="right-gauge" style="height: 40%; background: #f00;"></div>
+        </div>
+    </div>
+
+    <div class="led-container">
+        <div id="led-text" class="led-dot-font">⏱️ ANALYZING GAME FLOW... T1 vs GEN.G ... HYPED UP! 🚀</div>
+    </div>
+
+    <div id="audience-container">
+        </div>
+</div>
+
+<script src="script.js" defer></script>
+
+</body>
+</html>
