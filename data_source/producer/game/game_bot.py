@@ -89,7 +89,8 @@ def run_game_producer():
         
         total_frames = len(game_data)
         
-        for idx, frame in enumerate(game_data):
+        # [TODO] : 마지막 100개만
+        for idx, frame in enumerate(game_data[-100:]):
             frame['match_id'] = match_id
             
             # 🌟 1. 껍데기 시간(프레임 시간) 현재로 덮어쓰기!

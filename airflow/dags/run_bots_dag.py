@@ -3,7 +3,8 @@ import yaml
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.operators.empty import EmptyOperator  # 🏁 시작점용
+from airflow.operators.empty import EmptyOperator
+from airflow.operators.email import EmailOperator
 from airflow.sensors.time_delta import TimeDeltaSensor
 
 from airflow.providers.amazon.aws.operators.s3 import S3DeleteObjectsOperator
@@ -20,17 +21,22 @@ with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
 
 ctx = config['app_context']
 match_key = ctx['active_match_key']
-meta = config['matches'][match_key]['metadata']
 game_data = config['matches'][match_key]['data']
+metadata = config['matches'][match_key]['metadata']
 
 BUCKET_NAME = config['resources']['storage_serving']['s3_bucket']
 GLUE_ETL_JOB = config['resources']['processing']['glue_job_refiner']
 ATHENA_DB = config['resources']['processing']['athena_db']
+TABLES = config['resources']['processing']['tables']
 
 GAME_BOT_DIR = "/opt/airflow/data_source/producer/game"
 CHAT_BOT_DIR = "/opt/airflow/data_source/producer/chat"
 
 game_set_keys = list(game_data['game_sets'].keys())
+
+# Match ID 생성 함수 (중복 방지용)
+def generate_match_id(set_key):
+    return f"{metadata['tournament']}_{metadata['match_date']}_{metadata['teams']}_{set_key}"
 
 default_args = {
     'owner': 'eunbee',
@@ -39,172 +45,164 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-def generate_match_id(set_key):
-    return f"{meta['tournament']}_{meta['match_date']}_{meta['teams']}_{set_key}"
-
-# ---------------------------------------------------------
-# 🚀 2. DAG 정의
-# ---------------------------------------------------------
 with DAG(
-    dag_id='lol_series_analysis_master_dag',
+    dag_id='lol_series_analysis_master_v4',
     default_args=default_args,
     schedule_interval=None,
     catchup=False,
-    tags=['lol', 'analysis', 'athena', 'batch'],
+    tags=['lol', 'highlight', 'final']
 ) as dag:
 
- # 🏁 1. 모든 프로세스의 통합 시작점
-    start_pipeline = EmptyOperator(task_id='start_pipeline')
-    tables_created = EmptyOperator(task_id='tables_created') # 👈 테이블 생성 완료 체크용
+    start_task = EmptyOperator(task_id='start_series_pipeline')
 
-    # 🛠️ 2. 배치용 테이블 자동 생성 (각각 개별 태스크로 분리!)
-    ddl_queries = {
-        'game': f"CREATE EXTERNAL TABLE IF NOT EXISTS {ATHENA_DB}.btch_slv_game_table ( match_id STRING, ts BIGINT, events ARRAY<STRUCT<timestamp: BIGINT, event_type: STRING, killer_id: INT, victim_id: STRING, team_id: INT>> ) PARTITIONED BY (p_match_id STRING) STORED AS PARQUET LOCATION 's3://{BUCKET_NAME}/silver/game/'",
-        'chat': f"CREATE EXTERNAL TABLE IF NOT EXISTS {ATHENA_DB}.btch_slv_chat_table ( nickname STRING, content STRING, platform STRING, ts BIGINT ) PARTITIONED BY (p_match_id STRING) STORED AS PARQUET LOCATION 's3://{BUCKET_NAME}/silver/chat/'",
-        'report': f"CREATE EXTERNAL TABLE IF NOT EXISTS {ATHENA_DB}.btch_gld_match_reports ( match_id STRING, team STRING, total_kills INT, total_gold INT, chat_count INT ) STORED AS PARQUET LOCATION 's3://{BUCKET_NAME}/gold/match_reports/'"
-    }
+    # ---------------------------------------------------------
+    # 🧹 2. Clean Task: S3의 모든 종료 시그널 파일을 미리 삭제
+    # ---------------------------------------------------------
+    # 루프 돌면서 하나씩 지우는 대신, 시리즈 시작 전에 해당 매치들의 시그널을 미리 정리해!
+    target_match_ids = [generate_match_id(set_key) for set_key in game_data['game_sets'].keys()]
+    clean_all_signals = BashOperator(
+        task_id='clean_all_signals',
+        bash_command=f"aws s3 rm s3://{BUCKET_NAME}/signals/ --recursive --exclude '*' " + 
+                     " ".join([f"--include '{m_id}_finished.txt'" for m_id in target_match_ids])
+    )
 
-    for name, query in ddl_queries.items():
-        create_tbl_task = AthenaOperator(
-            task_id=f'create_batch_{name}_table',
-            query=query,
-            database=ATHENA_DB,
-            output_location=f"s3://{BUCKET_NAME}/athena-results/ddl/",
-        )
-        start_pipeline >> create_tbl_task >> tables_created
-
-    # 🛠️ 2. 배치용 테이블 자동 생성 (DDL)
-    # 분석 전, 실버/골드 테이블이 Glue Catalog에 등록되어 있는지 확인하고 없으면 생성해!
-    create_batch_tables = AthenaOperator(
-        task_id='create_batch_medallion_tables',
-        query='sql/create_batch_tables.sql',  # 👈 SQL 파일 경로 지정
-        params={                             # 👈 SQL 안에서 쓸 변수들 전달
-            'ATHENA_DB': ATHENA_DB,
-            'BUCKET_NAME': BUCKET_NAME
-        },
+    # ---------------------------------------------------------
+    # 🏗️ 3. Create Tasks: Athena 테이블들이 있는지 먼저 확인 (DDL)
+    # ---------------------------------------------------------
+    create_slv_game = AthenaOperator(
+        task_id='create_slv_game_table',
+        query='sql/ddl_batch_tables/create_slv_game.sql',
         database=ATHENA_DB,
-        output_location=f"s3://{BUCKET_NAME}/athena-results/ddl/",
-        aws_conn_id='aws_default',
+        params={'DB': ATHENA_DB, 'TABLE_NAME': TABLES['btch_slv_game'], 'BUCKET': BUCKET_NAME}
     )
 
-    # [Step 1] 공통 채팅 봇 실행 (독립 트랙)
-    run_chat_bot = BashOperator(
+    create_slv_chat = AthenaOperator(
+        task_id='create_slv_chat_table',
+        query='sql/ddl_batch_tables/create_slv_chat.sql',
+        database=ATHENA_DB,
+        params={'DB': ATHENA_DB, 'TABLE_NAME': TABLES['btch_slv_chat'], 'BUCKET': BUCKET_NAME}
+    )
+
+    create_gld_report = AthenaOperator(
+        task_id='create_gld_report_table',
+        query='sql/ddl_batch_tables/create_gld_report.sql',
+        database=ATHENA_DB,
+        params={'DB': ATHENA_DB, 'TABLE_NAME': TABLES['btch_gld_report'], 'BUCKET': BUCKET_NAME}
+    )
+
+    ddl_done = EmptyOperator(task_id='all_ddl_and_clean_done')
+    start_task >> clean_all_signals >> [create_slv_game, create_slv_chat, create_gld_report] >> ddl_done
+    # ---------------------------------------------------------
+    # 🧨 3.5 Series Chat Bot: 시리즈 내내 상주하며 채팅 수집 (루프 밖!)
+    # ---------------------------------------------------------
+    run_series_chat_bot = BashOperator(
         task_id='run_all_series_chat_bot',
-        bash_command=(
-            f"cd {CHAT_BOT_DIR} && "
-            f"setsid python chat_bot.py '{{{{ ts }}}}' > chat_bot.log 2>&1 < /dev/null & "
-            "sleep 2;"
-        ),
+        # Airflow 기준 시각인 ts를 넘겨서 동기화하고, nohup으로 백그라운드 실행!
+        bash_command=f"nohup python3 {CHAT_BOT_DIR}/chat_bot.py '{{{{ ts }}}}' > /dev/null 2>&1 &"
     )
 
-    # 🔗 시작하면 테이블 생성과 채팅 봇이 동시에 진행됨
-    start_pipeline >> run_chat_bot
-
+    # 🔗 DDL이랑 청소가 다 끝나면 채팅 봇 출발!
+    ddl_done >> run_series_chat_bot
+    # ---------------------------------------------------------
+    # 🤖 4. Game Sets Loop: 여기서부터 개별 세트 진행
+    # ---------------------------------------------------------
+    previous_set_task = ddl_done
     all_set_analysis_tasks = []
-    # 🔥 게임 세트 흐름은 '테이블 생성이 완료된 후' 시작되도록 설정!
-    previous_game_start_task = tables_created
 
-    # 🔄 3. 루프를 통한 동적 태스크 생성 (세트별 로직)
-    for idx, set_key in enumerate(game_set_keys):
-        set_info = game_data['game_sets'][set_key]
-        match_id = set_info.get('match_id', generate_match_id(set_key))
+
+    for set_key, set_info in game_data['game_sets'].items():
+        match_id = generate_match_id(set_key)
         wait_seconds = set_info['wait_seconds']
-        
-        # A. 세트 시작 대기
-        wait_before_set = TimeDeltaSensor(
+
+        wait_before_set = BashOperator(
             task_id=f'wait_before_{set_key}',
-            delta=timedelta(seconds=wait_seconds),
+            bash_command=f"sleep {wait_seconds}"
         )
 
-        # B-0. 기존 종료 시그널 제거 🧹 (Bash로 더 확실하게 처리)
-        clean_finished_signal = BashOperator(
-            task_id=f'clean_{set_key}_finished_signal',
-            bash_command=f"aws s3 rm s3://{BUCKET_NAME}/status/{match_id}_finished.txt || true",
-        )
-
-        # B. 게임 봇 실행
         run_game_bot = BashOperator(
             task_id=f'run_game_bot_{set_key}',
-            bash_command=(
-                f"cd {GAME_BOT_DIR} && "
-                f"python game_bot.py '{{{{ ts }}}}' {set_key}"
-            ),
+            bash_command=f"nohup python3 {GAME_BOT_DIR}/game_bot.py '{{{{ ts }}}}' '{set_key}' > /dev/null 2>&1 &"
         )
 
-        # C. 종료 시그널 감시 (S3 finished.txt)
+        # D. 넥서스 파괴 신호 감시 (S3 센서)
         wait_for_nexus = S3KeySensor(
-            task_id=f'wait_{set_key}_finished_signal',
+            task_id=f'wait_for_nexus_{set_key}',
             bucket_name=BUCKET_NAME,
-            bucket_key=f"status/{match_id}_finished.txt",
+            bucket_key=f'status/{match_id}_finished.txt',
             poke_interval=30,
-            timeout=7200,
+            timeout=3600
         )
 
-        # D. Glue Job: JSON -> Parquet (Silver Layer)
+        # E. 분석 프로세스 (Glue -> Partition Repair -> Athena Analysis)
         glue_transform = GlueJobOperator(
             task_id=f'glue_transform_{set_key}',
             job_name=GLUE_ETL_JOB,
-            script_args={
-                '--match_id': match_id,
-                '--bucket_name': BUCKET_NAME
-            },
-            aws_conn_id='aws_default',
+            script_args={'--match_id': match_id}
         )
 
-       
-        # E. Athena: 세트별 분석 (Gold Layer)
+        repair_game = AthenaOperator(
+            task_id=f'repair_game_table_{set_key}',
+            query=f"MSCK REPAIR TABLE {ATHENA_DB}.{TABLES['btch_slv_game']};",
+            database=ATHENA_DB
+        )
+
+        repair_chat = AthenaOperator(
+            task_id=f'repair_chat_table_{set_key}',
+            query=f"MSCK REPAIR TABLE {ATHENA_DB}.{TABLES['btch_slv_chat']};",
+            database=ATHENA_DB
+        )
+
         athena_set_analysis = AthenaOperator(
-            task_id=f'athena_analyze_{set_key}',
-            query='sql/analyze_set_reports.sql',  # 👈 SQL 파일 경로만 딱!
-            params={                              # 👈 SQL 파일 안에서 쓸 변수들 전달!
-                'ATHENA_DB': ATHENA_DB,
+            task_id=f'analyze_set_{set_key}',
+            query='sql/analyze_set_reports.sql',
+            database=ATHENA_DB,
+            params={
+                'DB': ATHENA_DB,
+                'GAME_TABLE_NAME': TABLES['btch_slv_game'],
+                'CHAT_TABLE_NAME': TABLES['btch_slv_chat'],
+                'REPORT_TABLE_NAME': TABLES['btch_gld_report'],
                 'match_id': match_id
-            },
-            database=ATHENA_DB,
-            output_location=f"s3://{BUCKET_NAME}/athena-results/sets/{set_key}/",
-            aws_conn_id='aws_default',
-        )
-        # 🛠️ F. 새 파티션 인식 (MSCK REPAIR) - 두 개로 쪼개기!
-        repair_game_pt = AthenaOperator(
-            task_id=f'repair_game_pt_{set_key}',
-            query=f"MSCK REPAIR TABLE {ATHENA_DB}.btch_slv_game_table",
-            database=ATHENA_DB,
-            output_location=f"s3://{BUCKET_NAME}/athena-results/repair/"
-        )
-        
-        repair_chat_pt = AthenaOperator(
-            task_id=f'repair_chat_pt_{set_key}',
-            query=f"MSCK REPAIR TABLE {ATHENA_DB}.btch_slv_chat_table",
-            database=ATHENA_DB,
-            output_location=f"s3://{BUCKET_NAME}/athena-results/repair/"
+            }
         )
 
-        previous_game_start_task >> wait_before_set >> clean_finished_signal >> run_game_bot
+        # 🔗 의존성 연결 로직 (for문 안쪽)
         
-        # 쪼개진 repair 태스크들을 병렬로 실행 후 분석으로 넘김
-        run_game_bot >> wait_for_nexus >> glue_transform >> [repair_game_pt, repair_chat_pt] >> athena_set_analysis
+        # 👉 [수정 3] 봇 실행 후 넥서스 센서가 돌도록 >> 연결 추가
+        previous_set_task >> wait_before_set >> run_game_bot >> wait_for_nexus
         
-        previous_game_start_task = run_game_bot
-        all_set_analysis_tasks.append(athena_set_analysis)
+        # 개별 분석 트랙: 종료 감지 시 즉시 분석 시작
+        wait_for_nexus >> glue_transform >> [repair_game, repair_chat] >> athena_set_analysis
+        
+        # 👉 [수정 4] 다음 세트(루프)가 '이번 세트의 분석(또는 넥서스 대기)'이 끝나면 돌도록 바통 터치!
+        previous_set_task = wait_for_nexus
 
-
-    # 🥇 4. 전체 경기 종합 분석
-    
-    # 💡 SQL에 넘겨주기 위해 리스트를 미리 콤마로 연결해둔다!
-    target_match_ids_str = ", ".join(target_match_ids)
+    # 🥇 4. 시리즈 종합 분석 (전체 경기가 끝나면 즉시 실행)
+    # 🌟 포인트: all_set_analysis_tasks를 기다리지 않고, 마지막 wait_for_nexus가 끝나면 바로 실행됨
+    target_match_ids_str = ", ".join([f"'{m_id}'" for m_id in target_match_ids])
 
     series_final_report = AthenaOperator(
-        task_id='generate_final_series_comprehensive_report',
-        query='sql/generate_final_series_report.sql',  # 👈 SQL 파일 경로
-        params={                                       # 👈 SQL 파일로 넘겨줄 변수들
-            'match_key': match_key,
-            'ATHENA_DB': ATHENA_DB,
-            'target_match_ids_str': target_match_ids_str
-        },
+        task_id='generate_final_series_report',
+        query='sql/generate_final_report.sql',
         database=ATHENA_DB,
-        output_location=f"s3://{BUCKET_NAME}/athena-results/final_series_report/",
-        aws_conn_id='aws_default',
-        trigger_rule='all_success' 
+        output_location=f"s3://{BUCKET_NAME}/gold/final_reports/{match_key}/",
+        params={
+            'ATHENA_DB': ATHENA_DB,
+            'REPORT_TABLE_NAME': TABLES['btch_gld_report'],
+            'target_match_ids_str': target_match_ids_str,
+            'match_key': match_key
+        }
     )
 
-    all_set_analysis_tasks >> series_final_report
+    send_report_email = EmailOperator(
+        task_id='send_final_report_email',
+        to='cindypink17@gmail.com', # 은비 이메일
+        subject=f'🔥 LoL Series Report: {match_key} 🔥',
+        html_content=f"""
+        <h3>LoL {match_key} 시리즈 데이터 수집 및 분석이 완료되었습니다.</h3>
+        <p>전체 세트의 넥서스 파괴 시그널이 감지되었으며, 종합 리포트 생성이 완료되었습니다.</p>
+        <p>S3 경로: s3://{BUCKET_NAME}/gold/final_reports/{match_key}/</p>
+        """
+    )
+
+    # 🌟 최종 분석은 마지막 세트의 wait_for_nexus가 성공하면 바로 실행되도록 연결!
+    all_set_analysis_tasks >> series_final_report >> send_report_email

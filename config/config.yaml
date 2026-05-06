@@ -46,6 +46,18 @@ resources:
     studio_notebook: "de-ai-05-lol-dev-an2-stdo-analyzer"
     glue_db: "de_ai_05_lol_dev_an2_glue_db" # DB명은 하이픈(-) 대신 언더바(_) 권장
     athena_db: "de_ai_05_lol_dev_an2_glue_db"
+    tables:
+      # Speed Layer
+      spd_brz_chat: "spd_brz_chat_tbl"
+      spd_brz_game: "spd_brz_game_tbl"
+      spd_gld_s3_score: "spd_gld_s3_score_tbl"
+      spd_gld_kds_score: "spd_gld_kds_score_tbl"
+      spd_gld_kds_chat: "spd_gld_kds_chat_tbl"
+
+      # Batch Layer
+      btch_slv_game: "btch_slv_game_tbl"   # 👈 요렇게!
+      btch_slv_chat: "btch_slv_chat_tbl"
+      btch_gld_report: "btch_gld_match_reports_tbl"
     # 🌟 Glue Job (우리가 이름 바꾼 그 녀석!)
     glue_job_refiner: "de-ai-05-lol-dev-an2-glue-slv-refiner"
     # TYPE          : Spark
@@ -59,6 +71,8 @@ resources:
 
     # 🚀 [New] 통합 배달부 람다 추가
     os_loader_lambda: "de-ai-05-lol-dev-an2-lmd-gld-os-loader"
+    api_hander_lambda: "de-ai-05-lol-dev-an2-lmd-gld-api-handler"
+
     # 트리거 연결
 
   storage_serving:
@@ -83,6 +97,13 @@ resources:
     #   ]
     # }
     # opensearch dashboard에 접속하고 security -> roles
+    api_gateway: "de-ai-05-lol-dev-an2-agw-gld-api"
+    # IP 주소 유형 : IPv4
+    # 통합 : Lambda 선택 -> de-ai-05-lol-dev-an2-lmd-gld-api-handler
+    # 매서드 : GET
+    # 리소스 경로 : /lol
+    # 통합 -> 람다 함수 선택
+
     
   analytics:
     # SQL based analysis on S3
@@ -105,7 +126,7 @@ matches:
       game_sets:
           g4:
             file_name: "t1_blg_g4_exact.json"
-            wait_seconds: 55
+            wait_seconds: 5
           g5:
             file_name: "t1_blg_g5_exact.json"
-            wait_seconds: 3182
+            wait_seconds: 150
