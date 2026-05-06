@@ -1,0 +1,173 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+body { 
+    margin: 0; 
+    padding: 0;
+    overflow-x: hidden; 
+    background: #020205; 
+    font-family: 'Pretendard', sans-serif; 
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#stadium-wrapper {
+    width: 100vw;
+    min-height: 100vh;
+    background: radial-gradient(circle at top, #0a1020 0%, #020205 70%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 20px;
+}
+
+/* 📺 메인 스크린 구역 */
+.screen-area {
+    width: 1020px; 
+    height: 573px; 
+    background: #000;
+    border: 4px solid #c8aa6e;
+    box-shadow: 0 0 50px rgba(0, 150, 255, 0.4);
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 40px;
+    z-index: 10;
+    position: relative;
+    overflow: hidden;
+}
+
+/* 👥 관중석 컨테이너 */
+#audience-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px; 
+    width: 100%;
+    padding-bottom: 50px;
+}
+
+.audience-row {
+    display: flex;
+    justify-content: center;
+    gap: 4px; 
+}
+
+/* 👤 좌석 기본 설정 (회색 빈자리) */
+.seat {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    background-color: #222; /* 아주 어두운 회색 (빈 자리) */
+    border-radius: 50%;
+    transition: all 0.4s ease;
+    filter: brightness(0.6); /* 빈 자리는 어둡게 */
+}
+
+/* 🎮 사람이 앉았을 때 (아바타 활성화) */
+.seat.occupied {
+    background-size: cover;
+    filter: brightness(0.4); /* 👈 말 안 할 때: 어둡고 채도 낮게 */
+    opacity: 0.7;
+    transition: filter 0.3s ease, transform 0.3s ease, opacity 0.3s ease;
+}
+.seat.occupied.jumping {
+    filter: brightness(1.2) grayscale(0); /* 👈 말 할 때(jumping): 확 밝아짐! */
+    opacity: 1;
+    z-index: 100;
+}
+
+.seat.jumping {
+    transform: translateY(-10px) scale(1.2);
+    z-index: 50;
+}
+
+/* 💬 말풍선 스타일 */
+.chat-bubble {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    color: #111;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 10px; 
+    font-weight: 800;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 100;
+    animation: popUp 0.3s ease-out;
+}
+
+/* 🔥 하이라이트 말풍선 (우선순위) */
+.chat-bubble.high-priority {
+    background: linear-gradient(135deg, #ffcc00, #fffaaa);
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 15px rgba(255, 204, 0, 0.8);
+    font-size: 11px;
+}
+
+@keyframes popUp {
+    0% { transform: translateX(-50%) scale(0); opacity: 0; }
+    100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+/* style.css 하단에 추가하거나 해당 위치에 삽입해! */
+
+/* 게이지와 화면을 가로로 정렬하기 위한 컨테이너 */
+.main-stage {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 0px;
+}
+
+/* 📟 LED 전광판 스타일 */
+.led-container {
+    width: 1020px; /* 화면 너비랑 맞췄어 */
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 4px;
+    overflow: hidden;
+    white-space: nowrap;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);
+    margin-top: 0;      /* 👈 위쪽 여백은 아예 0으로! */
+    margin-bottom: 30px; /* 관중석과의 간격 */
+}
+
+.led-dot-font {
+    font-family: 'Courier New', Courier, monospace;
+    color: #0f0; 
+    font-size: 20px;
+    padding: 8px;
+    text-shadow: 0 0 8px #0f0;
+    display: inline-block; /* 애니메이션을 위해 필요 */
+    animation: scroll-text 15s linear infinite;
+}
+
+@keyframes scroll-text {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+}
+
+/* 📊 사이드 게이지 스타일 */
+.side-gauge {
+    width: 15px;
+    height: 400px;
+    background: #111;
+    border: 1px solid #444;
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.gauge-fill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1); /* 좀 더 쫀득하게 움직이도록 수정! */
+    box-shadow: 0 0 10px currentColor;
+}
