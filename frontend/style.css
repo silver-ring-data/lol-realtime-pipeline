@@ -86,6 +86,10 @@ body {
 
 /* 💬 말풍선 스타일 */
 .chat-bubble {
+    display: flex;
+    flex-direction: column; /* 위아래로 배치 */
+    align-items: center;
+    gap: 2px;
     position: absolute;
     bottom: 30px;
     left: 50%;
@@ -101,6 +105,12 @@ body {
     z-index: 100;
     animation: popUp 0.3s ease-out;
 }
+.chat-nickname {
+    font-size: 0.7em; /* 닉네임은 좀 더 작게 */
+    color: #666;      /* 살짝 연한 회색 */
+    font-weight: bold;
+    white-space: nowrap;
+}
 
 /* 🔥 하이라이트 말풍선 (우선순위) */
 .chat-bubble.high-priority {
@@ -108,6 +118,9 @@ body {
     border: 2px solid #ffffff;
     box-shadow: 0 0 15px rgba(255, 204, 0, 0.8);
     font-size: 11px;
+}
+.chat-bubble.high-priority .chat-nickname {
+    color: #fff;
 }
 
 @keyframes popUp {

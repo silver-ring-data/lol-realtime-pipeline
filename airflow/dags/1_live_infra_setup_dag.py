@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.amazon.aws.operators.athena import AthenaOperator
 from airflow.providers.amazon.aws.operators.s3 import S3DeleteObjectsOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 # ---------------------------------------------------------
 # 🛠️ 1. Config 및 환경 변수 설정
@@ -54,19 +55,45 @@ with DAG(
 
     # 2. Athena 테이블 생성 (DDL)
     create_slv_game = AthenaOperator(
-        task_id='create_slv_game_table', query='sql/ddl_batch_tables/create_slv_game.sql',
-        database=ATHENA_DB, params={'DB': ATHENA_DB, 'TABLE_NAME': TABLES['btch_slv_game'], 'BUCKET': BUCKET_NAME}
+        task_id='create_slv_game_table', 
+        query='sql/ddl_batch_tables/create_slv_game.sql',
+        database=ATHENA_DB,
+        output_location=f"s3://{BUCKET_NAME}/athena-results/ddl/",
+        aws_conn_id='aws_default',
+        params={'DB': ATHENA_DB, 
+                'TABLE_NAME': TABLES['btch_slv_game'], 
+                'BUCKET': BUCKET_NAME
+                }
     )
     create_slv_chat = AthenaOperator(
-        task_id='create_slv_chat_table', query='sql/ddl_batch_tables/create_slv_chat.sql',
-        database=ATHENA_DB, params={'DB': ATHENA_DB, 'TABLE_NAME': TABLES['btch_slv_chat'], 'BUCKET': BUCKET_NAME}
+        task_id='create_slv_chat_table', 
+        query='sql/ddl_batch_tables/create_slv_chat.sql',
+        database=ATHENA_DB,
+        output_location=f"s3://{BUCKET_NAME}/athena-results/ddl/",
+        aws_conn_id='aws_default',
+        params={'DB': ATHENA_DB, 
+                'TABLE_NAME': TABLES['btch_slv_chat'], 
+                'BUCKET': BUCKET_NAME}
     )
     create_gld_report = AthenaOperator(
-        task_id='create_gld_report_table', query='sql/ddl_batch_tables/create_gld_report.sql',
-        database=ATHENA_DB, params={'DB': ATHENA_DB, 'TABLE_NAME': TABLES['btch_gld_report'], 'BUCKET': BUCKET_NAME}
+        task_id='create_gld_report_table', 
+        query='sql/ddl_batch_tables/create_gld_report.sql',
+        output_location=f"s3://{BUCKET_NAME}/athena-results/ddl/",
+        aws_conn_id='aws_default',
+        database=ATHENA_DB, 
+        params={'DB': ATHENA_DB, 
+                'TABLE_NAME': TABLES['btch_gld_report'], 
+                'BUCKET': BUCKET_NAME}
     )
 
     setup_done = EmptyOperator(task_id='setup_done')
 
-    # 의존성 연결
-    start_task >> clean_all_signals >> [create_slv_game, create_slv_chat, create_gld_report] >> setup_done
+    # 2. 👇 2번 DAG를 호출하는 태스크 추가
+    trigger_dag_2 = TriggerDagRunOperator(
+        task_id='trigger_2_live_ingestion',
+        trigger_dag_id='2_live_ingestion_relay_dag', # 깨울 2번 DAG의 id
+        wait_for_completion=False
+    )
+
+    # 3. 👇 맨 아래 의존성 연결 줄의 맨 끝에 trigger_dag_2를 붙여줘!
+    start_task >> clean_all_signals >> [create_slv_game, create_slv_chat, create_gld_report] >> setup_done >> trigger_dag_2

@@ -71,6 +71,9 @@ resources:
 
     # 🚀 [New] 통합 배달부 람다 추가
     os_loader_lambda: "de-ai-05-lol-dev-an2-lmd-gld-os-loader"
+    # kinesis 연결해주기
+    # 배치 기간 : 1
+    # 배치 크기 : 100
     api_hander_lambda: "de-ai-05-lol-dev-an2-lmd-gld-api-handler"
 
     # 트리거 연결
@@ -96,6 +99,9 @@ resources:
     #     }
     #   ]
     # }
+
+    # arn:aws:iam::827913617635:role/service-role/de-ai-05-lol-dev-an2-lmd-gld-os-loader-role-e1zw7aen
+    # arn:aws:iam::827913617635:role/service-role/de-ai-05-lol-dev-an2-lmd-gld-api-handler-role-j4z8evpb
     # opensearch dashboard에 접속하고 security -> roles
     api_gateway: "de-ai-05-lol-dev-an2-agw-gld-api"
     # IP 주소 유형 : IPv4
@@ -104,14 +110,16 @@ resources:
     # 리소스 경로 : /lol
     # 통합 -> 람다 함수 선택
 
-    
+  
   analytics:
     # SQL based analysis on S3
     athena_workgroup: "de-ai-05-lol-dev-an2-athena-wg"
 # 🎯 [핵심] 현재 어떤 경기를 시뮬레이션할지 여기서만 선택!
+serving_endpoint: "https://u4xlftet19.execute-api.ap-northeast-2.amazonaws.com/lol"
 app_context:
   active_match_key: "worlds_2024_final" # 아래 'matches'에 등록된 키값
-  active_set: "g4"                      # g4 또는 g5
+  active_set: "g4"                   # g4 또는 g5
+  refresh_interval_ms: 1000
 
 # 📚 경기 저장소: 새로운 경기가 추가될 때마다 여기에 계속 덧붙이면 돼!
 matches:
@@ -126,7 +134,7 @@ matches:
       game_sets:
           g4:
             file_name: "t1_blg_g4_exact.json"
-            wait_seconds: 5
+            wait_seconds: 55 # TODO: 55
           g5:
             file_name: "t1_blg_g5_exact.json"
-            wait_seconds: 150
+            wait_seconds: 3182 # TODO: 3182

@@ -54,37 +54,58 @@ with DAG(
 
     start_analysis = EmptyOperator(task_id='start_analysis')
 
-# A. Glue로 JSON -> Parquet 변환
+    # A. Glue로 JSON -> Parquet 변환
     glue_transform = GlueJobOperator(
         task_id='glue_transform_step',
         job_name=GLUE_ETL_JOB,
-        script_args={'--match_id': match_id}
+        script_args={
+            '--bucket_name': BUCKET_NAME,
+            '--match_id': match_id
+            },
+        aws_conn_id='aws_default'
     )
 
     # B. 파티션 갱신
+    # 💡 MSCK REPAIR 대신, 특정 경로를 콕 집어주는 ALTER TABLE 사용
+    # 💡 은비가 S3에서 발견한 'p'가 빠진 폴더명(match_id=)을 LOCATION에 반영했어
     repair_game = AthenaOperator(
         task_id='repair_game_table',
-        query=f"MSCK REPAIR TABLE {ATHENA_DB}.{TABLES['btch_slv_game']};",
-        database=ATHENA_DB
-    )
-    repair_chat = AthenaOperator(
-        task_id='repair_chat_table',
-        query=f"MSCK REPAIR TABLE {ATHENA_DB}.{TABLES['btch_slv_chat']};",
-        database=ATHENA_DB
+        query=f"""
+            ALTER TABLE {ATHENA_DB}.{TABLES['btch_slv_game']} 
+            ADD IF NOT EXISTS PARTITION (p_match_id='{{{{ dag_run.conf.get('match_id') }}}}') 
+            LOCATION 's3://{BUCKET_NAME}/silver/game/match_id={{{{ dag_run.conf.get('match_id') }}}}/';
+        """,
+        database=ATHENA_DB,
+        output_location=f"s3://{BUCKET_NAME}/athena-results/",
+        aws_conn_id='aws_default'
     )
 
-    # C. 개별 세트 분석 (결과를 btch_gld_report 테이블에 저장)
+    repair_chat = AthenaOperator(
+        task_id='repair_chat_table',
+        query=f"""
+            ALTER TABLE {ATHENA_DB}.{TABLES['btch_slv_chat']} 
+            ADD IF NOT EXISTS PARTITION (p_match_id='{{{{ dag_run.conf.get('match_id') }}}}') 
+            LOCATION 's3://{BUCKET_NAME}/silver/chat/match_id={{{{ dag_run.conf.get('match_id') }}}}/';
+        """,
+        database=ATHENA_DB,
+        output_location=f"s3://{BUCKET_NAME}/athena-results/",
+        aws_conn_id='aws_default'
+    )
+    # C. 개별 세트 분석
     athena_set_analysis = AthenaOperator(
         task_id='analyze_set_to_gold',
         query='sql/analyze_set_reports.sql',
         database=ATHENA_DB,
         params={
             'DB': ATHENA_DB,
+            'REPORT_TABLE_NAME': TABLES['btch_gld_report'],
             'GAME_TABLE_NAME': TABLES['btch_slv_game'],
             'CHAT_TABLE_NAME': TABLES['btch_slv_chat'],
-            'REPORT_TABLE_NAME': TABLES['btch_gld_report'],
-            'match_id': match_id
-        }
+            'match_id': match_id # 🌟 Jinja 템플릿 사용[cite: 3]
+        },
+        # 👇 저장 경로를 세트별 폴더로 분리![cite: 4]
+        output_location=f"s3://{BUCKET_NAME}/athena-results/",
+        aws_conn_id='aws_default'
     )
 
     # 🌟 갈림길: 마지막 세트인가?
@@ -110,19 +131,21 @@ with DAG(
             'REPORT_TABLE_NAME': TABLES['btch_gld_report'],
             'target_match_ids_str': target_match_ids_str, # 상단에서 정의한 G1~G5 ID 리스트
             'match_key': match_key
-        }
+        },
+        aws_conn_id='aws_default'
     )
-
+    '''
     send_report_email = EmailOperator(
         task_id='send_final_report_email',
         to='cindypink17@gmail.com',
         subject=f'🔥 LoL Series Report: {match_key} 🔥',
         html_content=f"시리즈 분석이 완료되었습니다. S3에서 결과를 확인하세요!"
     )
+    '''
 
     end_analysis = EmptyOperator(task_id='end_analysis')
 
     # 🔗 의존성 연결 (폭포수처럼!)
     start_analysis >> glue_transform >> [repair_game, repair_chat] >> athena_set_analysis >> branch_task
-    branch_task >> series_final_report >> send_report_email
+    branch_task >> series_final_report #>> send_report_email
     branch_task >> end_analysis
