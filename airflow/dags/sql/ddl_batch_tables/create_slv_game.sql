@@ -1,6 +1,7 @@
 CREATE EXTERNAL TABLE IF NOT EXISTS {{ params.DB }}.{{ params.TABLE_NAME }} (
     match_id STRING,
     ts BIGINT,
+    participant_frames MAP<STRING, STRUCT<total_gold: INT, minions_killed: INT>>,
     events ARRAY<STRUCT<
         timestamp: BIGINT,
         event_type: STRING,

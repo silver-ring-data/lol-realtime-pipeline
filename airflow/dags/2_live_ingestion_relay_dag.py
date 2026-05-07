@@ -38,7 +38,7 @@ with DAG(
     # 채팅 봇은 백그라운드에서 계속 실행
     run_series_chat_bot = BashOperator(
         task_id='run_all_series_chat_bot',
-        bash_command=f"nohup python3 {CHAT_BOT_DIR}/chat_bot.py '{{{{ ts }}}}' > /dev/null 2>&1 &"
+        bash_command=f"cd {CHAT_BOT_DIR} && nohup python3 chat_bot.py '{{{{ ts }}}}' > /dev/null 2>&1 &"
     )
     start_relay >> run_series_chat_bot
 
@@ -54,7 +54,7 @@ with DAG(
         
         run_game_bot = BashOperator(
             task_id=f'run_game_bot_{set_key}',
-            bash_command=f"nohup python3 {GAME_BOT_DIR}/game_bot.py '{{{{ ts }}}}' '{set_key}' > /dev/null 2>&1 &"
+            bash_command=f"cd {GAME_BOT_DIR} && nohup python3 game_bot.py '{{{{ ts }}}}' '{set_key}' > /dev/null 2>&1 &"
         )
 
         wait_for_nexus = S3KeySensor(

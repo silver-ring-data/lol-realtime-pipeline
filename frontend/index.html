@@ -10,8 +10,9 @@
 <div id="stadium-wrapper">
     <div class="main-stage">
         <div class="side-gauge left">
-            <div class="gauge-fill" id="left-gauge" style="height: 70%; background: #0096ff;"></div>
-        </div>
+        <!-- id를 event-gauge로 변경 -->
+        <div class="gauge-fill" id="event-gauge" style="height: 70%; background: #0096ff;"></div>
+    </div>
 
         <div class="screen-area">
             <iframe width="100%" height="100%" src="https://www.youtube.com/embed/NsWPXB5Wqzs?start=13830&autoplay=1&mute=1" 
@@ -21,7 +22,8 @@
         </div>
 
         <div class="side-gauge right">
-            <div class="gauge-fill" id="right-gauge" style="height: 40%; background: #f00;"></div>
+            <!-- id를 chat-gauge로 변경 -->
+            <div class="gauge-fill" id="chat-gauge" style="height: 40%; background: #f00;"></div>
         </div>
     </div>
 
@@ -33,7 +35,9 @@
         </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script src="script.js" defer></script>
+
 
 </body>
 </html>

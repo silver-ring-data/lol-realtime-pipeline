@@ -22,6 +22,8 @@ x-airflow-common: &airflow-common
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
     - ./data_source:/opt/airflow/data_source
+    - ./frontend:/usr/share/nginx/html
+    - ./config:/usr/share/nginx/html/config
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:
@@ -29,17 +31,22 @@ x-airflow-common: &airflow-common
 
 services:
   postgres:
-    image: postgres:13
-    container_name: lol-airflow-db
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      image: postgres:13
+      container_name: lol-airflow-db
+      environment:
+        POSTGRES_USER: airflow
+        POSTGRES_PASSWORD: airflow
+        POSTGRES_DB: airflow
+      # 👇 1. DB의 데이터를 영구 저장할 볼륨을 컨테이너에 연결해줘
+      volumes:
+        - postgres-data:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U airflow"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+      networks:
+      - lol-network
 
   airflow-webserver:
     <<: *airflow-common
@@ -52,11 +59,15 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+    networks:
+      - lol-network
 
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
     container_name: lol-airflow-scheduler
+    networks:
+      - lol-network
 
   airflow-init:
     <<: *airflow-common
@@ -67,3 +78,22 @@ services:
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    networks:
+      - lol-network
+
+  # 1. 프론트엔드 서비스 추가
+  frontend:
+    image: nginx:alpine  # 아주 가볍고 빠른 웹 서버야
+    container_name: lol-frontend
+    ports:
+      - "80:80"  # 내 컴퓨터의 80번 포트로 접속하면 도커 안의 80번(프론트)으로 연결돼
+    volumes:
+      - ./frontend:/usr/share/nginx/html  # 은비의 로컬 frontend 폴더를 도커에 동기화해
+    networks:
+      - lol-network
+networks:
+  lol-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
