@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] 채�
 logger = logging.getLogger("ChatProducer")
 
 CONFIG_PATH = "/opt/airflow/config/config.yaml"
+# CONFIG_PATH = r'C:\Users\Dell3571\Documents\lol-realtime-pipeline\config\config.yaml'
 
 # 1. 설정 파일 읽기
 with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
@@ -36,13 +37,31 @@ current_set = ctx['active_set']
 match_info = config['matches'][match_key]
 meta = match_info['metadata']
 data_paths = match_info['data']
+timeline = match_info['timeline']
 
 # 🔥 매치 ID 생성
-#MATCH_ID = f"{meta['tournament']}_{meta['match_date']}_{meta['teams']}_{current_set}"
+
 DATA_FILE = os.path.join(data_paths['local_path'], data_paths['chat_source'])
 
 kinesis_client = boto3.client('kinesis', region_name=REGION)
+# ✨ 추가: viewer_bot에서 쓰던 다이내믹 match_id 생성 함수 도입!
+def get_current_match_id(elapsed_seconds, timeline_config, metadata):
+    # 1. 지금이 타임라인 상 어디인지 확인
+    current_stage = "post_game" # 기본값
+    
+    for stage_key, info in timeline_config.items():
+        start = info['start_seconds']
+        end = start + info['duration']
+        if start <= elapsed_seconds < end:
+            current_stage = stage_key # 'pre_game', 'g4', 'intermission', 'g5' 중 하나
+            break
 
+    # 2. 대기 시간이나 쉬는 시간이면 단어만 반환
+    if current_stage in ['pre_game', 'intermission', 'post_game']:
+        return current_stage
+    
+    # 3. 경기 중일 때만 원래 포맷으로 조립 (예: worlds_2024_20241102_t1_blg_g4)
+    return f"{metadata['tournament']}_{metadata['match_date']}_{metadata['teams']}_{current_stage}"
 def run_chat_producer():
     logger.info("="*50)
     logger.info(f"💬 채팅봇 세팅 완료! 대기 없이 즉시 송출을 시작합니다.")
@@ -70,13 +89,17 @@ def run_chat_producer():
 
     for idx, chat in enumerate(chat_data_list):
         curr_original_ts = chat['timestamp']
-        
+    
         wait_time = (curr_original_ts - prev_original_ts) / 1000.0
         if wait_time > 0:
             time.sleep(wait_time)
         
         try:
-            #chat['match_id'] = MATCH_ID
+            # ✨ 수정포인트: 현재 경과 시간 계산 후 다이내믹하게 match_id 받아오기
+            elapsed_seconds = int(time.time() - base_time)
+            current_match_id = get_current_match_id(elapsed_seconds, timeline, meta)
+            
+            chat['match_id'] = current_match_id
             chat['timestamp'] = int(time.time() * 1000)  # 현재 시간으로 덮어쓰기!
             
             chat_str = json.dumps(chat, ensure_ascii=False) + "\n"  
@@ -84,16 +107,14 @@ def run_chat_producer():
             kinesis_client.put_record(
                 StreamName=STREAM_NAME,
                 Data=chat_str.encode('utf-8'),
-                # 💡 파티션 키 변경: 기존 MATCH_ID 대신 '닉네임'이나 '타임스탬프'를 쓰면 
-                # Kinesis 샤드(Shard)들에 데이터가 골고루 예쁘게 분산돼!
                 PartitionKey=chat.get('nickname', str(chat['timestamp'])) 
             )
-            prev_original_ts = curr_original_ts
             
+            # 로그에도 현재 매치 ID 찍히도록 살짝 수정했어!
             if (idx + 1) % 50 == 0:
                 nickname = chat.get('nickname', '익명')
                 content = chat.get('content', '')
-                logger.info(f"📊 {idx+1}/{len(chat_data_list)} 전송 중 | 💬 {nickname}: {content[:15]}...")
+                logger.info(f"📊 {idx+1}/{len(chat_data_list)} 전송 중 | [{current_match_id}] 💬 {nickname}: {content[:15]}...")
             
         except Exception as e:
             logger.error(f"🚨 전송 실패: {e}")

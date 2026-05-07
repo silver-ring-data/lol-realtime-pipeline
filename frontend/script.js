@@ -1,8 +1,8 @@
 const container = document.getElementById('audience-container');
 const allSeats = [];
 let shuffledSeats = [];
-const MAX_REAL_VIEWERS = 100000;
-
+const MAX_REAL_VIEWERS = 110000;
+const seenChats = new Set();
 // 🌟 [핵심] 중복 방지용 시간 도장
 let lastChatTs = "2000-01-01T00:00:00Z";
 
@@ -38,7 +38,7 @@ function shuffle(array) {
 
 // --- 경기장 건설 ---
 function buildStadium(totalRows) {
-    let baseCount = 34; 
+    let baseCount = 38; 
     container.innerHTML = '';
     allSeats.length = 0; // 초기화
     for (let r = 0; r < totalRows; r++) {
@@ -104,7 +104,7 @@ function displayChat(seat, nickname, message, priority) {
     setTimeout(() => {
         if (seat.contains(bubble)) bubble.remove();
         seat.classList.remove('jumping');
-    }, 1500);
+    }, 3000);
 }
 
 // --- 데이터 페칭 (로그 강화 버전) ---
@@ -115,37 +115,63 @@ async function fetchRealtimeData(apiUrl) {
         
         const data = await response.json();
         
-        // 🔍 [친구의 팁] 여기서 데이터가 어떻게 생겼는지 콘솔에 팍! 찍어줄게.
-        console.log("====================================");
-        console.log("📥 [실시간 데이터 수신]", new Date().toLocaleTimeString());
-        console.log("📊 현재 점수:", data.latest_score);
-        console.log("💬 최신 채팅 개수:", data.latest_chats ? data.latest_chats.length : 0);
-        console.log("====================================");
+        // 🔍 데이터 확인용 로그 (시청자 수 추가!)
+        console.log("📥 [데이터 수신]", new Date().toLocaleTimeString());
+        console.log("📊 점수:", data.latest_score);
+        console.log("👥 시청자:", data.latest_viewer ? data.latest_viewer.viewer_count : 0);
+        console.log("💬 채팅:", data.latest_chats?.length || 0);
 
-        // 1. 전광판 & 게이지 업데이트
+        // 1. 하이라이트 점수 & 전광판 업데이트
         if (data.latest_score) {
             updateArenaHUD(
                 data.latest_score.event_score, 
                 data.latest_score.chat_score, 
                 data.latest_score.final_score
             );
+            // 게이지바도 있다면 같이 업데이트!
+            if (typeof updateGauges === 'function') {
+                updateGauges(data.latest_score.event_score, data.latest_score.chat_score);
+            }
         }
 
-        // 2. 실시간 채팅 고속 처리
+        // 🌟 2. 시청자 수 실시간 반영 (추가된 부분!)
+        if (data.latest_viewer && data.latest_viewer.viewer_count !== undefined) {
+            const count = data.latest_viewer.viewer_count;
+            
+            // UI 숫자 업데이트 (id="viewer-count-display" 엘리먼트가 있어야 해!)
+            const displayEl = document.getElementById('viewer-count-display');
+            if (displayEl) {
+                displayEl.innerText = count.toLocaleString(); // 10,000 처럼 콤마 찍기
+            }
+            
+            // 🏟️ 경기장 내 아바타 가시성 조절 함수 호출!
+            // (우리가 이전에 만든 setViewerCount 혹은 updateViewerCount 이름에 맞춰줘)
+            if (typeof updateViewerCount === 'function') {
+                updateViewerCount(count); 
+            }
+        }
+
+        // 🌟 2. fetchRealtimeData 함수 안의 3번 채팅 처리 로직을 이걸로 싹 교체해!
+        // 3. 실시간 채팅 고속 처리 (바구니 중복 제거 + 랜덤 폭발!)
         if (data.latest_chats && data.latest_chats.length > 0) {
             const sortedChats = [...data.latest_chats].sort((a, b) => new Date(a.ts) - new Date(b.ts));
             
-            let addedCount = 0;
             sortedChats.forEach((chat) => {
-                if (new Date(chat.ts) > new Date(lastChatTs)) {
+                // 닉네임 + 내용 + 시간으로 고유한 지문(Key) 만들기
+                const chatKey = `${chat.nickname}_${chat.content}_${chat.ts}`;
+                
+                // 이 지문이 우리 바구니에 없는 '새로운' 채팅일 때만 통과!
+                if (!seenChats.has(chatKey)) {
+                    seenChats.add(chatKey); // 바구니에 저장!
+                    
+                    // 바구니가 너무 무거워지면 한번 싹 비워주기 (메모리 보호)
+                    if (seenChats.size > 1000) seenChats.clear();
+                    
+                    // 0 ~ 400ms 사이에서 무작위로 터지게 (폭죽 효과 팡팡팡!)
+                    const randomDelay = Math.random() * 400;
                     setTimeout(() => {
                         onMessageReceived(chat.nickname, chat.content, chat.priority);
-                    }, addedCount * 50); 
-                    
-                    if (new Date(chat.ts) > new Date(lastChatTs)) {
-                        lastChatTs = chat.ts;
-                    }
-                    addedCount++;
+                    }, randomDelay); 
                 }
             });
         }

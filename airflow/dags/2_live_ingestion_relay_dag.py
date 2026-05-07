@@ -20,6 +20,7 @@ BUCKET_NAME = config['resources']['storage_serving']['s3_bucket']
 
 GAME_BOT_DIR = "/opt/airflow/data_source/producer/game"
 CHAT_BOT_DIR = "/opt/airflow/data_source/producer/chat"
+VIEWER_BOT_DIR = "/opt/airflow/data_source/producer/viewer"
 
 default_args = {'owner': 'eunbee', 'start_date': datetime(2026, 5, 4), 'retries': 1}
 def generate_match_id(set_key):
@@ -40,7 +41,16 @@ with DAG(
         task_id='run_all_series_chat_bot',
         bash_command=f"cd {CHAT_BOT_DIR} && nohup python3 chat_bot.py '{{{{ ts }}}}' > /dev/null 2>&1 &"
     )
-    start_relay >> run_series_chat_bot
+
+    # 👀 2. 시청자 봇 실행 (채팅 봇이랑 단짝친구! 같이 시작!)
+    run_series_viewer_bot = BashOperator(
+        task_id='run_all_series_viewer_bot',
+        bash_command=(
+            f"cd {VIEWER_BOT_DIR} && "
+            f"setsid python3 viewer_bot.py '{{{{ ts }}}}' > viewer_bot.log 2>&1 < /dev/null &"
+        )
+    )
+    start_relay >> [run_series_chat_bot, run_series_viewer_bot]
 
     previous_game_end_task = start_relay
     set_keys = list(game_data['game_sets'].keys())

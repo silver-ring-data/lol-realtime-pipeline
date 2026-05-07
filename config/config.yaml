@@ -14,6 +14,7 @@ resources:
       # --- Bronze Layer
       chat_brz: "de-ai-05-lol-dev-an2-kds-brz-chat"
       game_brz: "de-ai-05-lol-dev-an2-kds-brz-game"
+      viewer_brz: "de-ai-05-lol-dev-an2-kds-brz-viewer"
       # --- Gold Layer
       chat_gld: "de-ai-05-lol-dev-an2-kds-gld-chat"
       score_gld: "de-ai-05-lol-dev-an2-kds-gld-score"
@@ -23,13 +24,13 @@ resources:
     kinesis_data_firehose: # Dynamic Partitioning
       # --- 💬 채팅 데이터 (Dynamic Partitioning 적용)
       chat_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-chat"
-      # Prefix: bronze/chat/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
+      # Prefix: bronze/chat/p_match_id=!{partitionKeyFromQuery:match_id}/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/
       # Error : bronze/errors/chat/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
       # Buffer hints (버퍼 힌트) : 크기 1MB, 간격 60초
 
       # --- 🎮 게임 데이터 (Dynamic Partitioning 적용)
       game_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-game"
-      # Prefix: bronze/game/match_id=!{partitionKeyFromQuery:match_id}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
+      # Prefix: bronze/game/p_match_id=!{partitionKeyFromQuery:match_id}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/
       # Error : bronze/errors/game/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
       # Buffer hints (버퍼 힌트) : 크기 1MB, 간격 60초
 
@@ -128,6 +129,30 @@ matches:
       tournament: "worlds_2024"
       match_date: "20241102"
       teams: "t1_blg"
+    # 📺 전체 방송 타임라인 (시청자 봇이 참고할 기준)
+    timeline:
+      pre_game:
+        start_seconds: 0
+        duration: 55
+        label: "PRE_GAME"
+      g4:
+        start_seconds: 55
+        duration: 1902
+        label: "T1_BLG_G4"
+      intermission:
+        start_seconds: 1957 # 55 + 1902
+        duration: 1225      # 우리가 계산한 20분 25초!
+        label: "INTERMISSION"
+      g5:
+        start_seconds: 3182 # 1957 + 1225
+        duration: 1933
+        label: "T1_BLG_G5"
+      post_game:
+        start_seconds: 5115
+        duration: 600
+        label: "POST_GAME"
+
+    # 🎮 실제 게임 봇 실행 설정 (Airflow Relay용)
     data:
       local_path: "./data"
       chat_source: "t1_blg_chat.jsonl"  # 채팅은 통파일
@@ -135,6 +160,8 @@ matches:
           g4:
             file_name: "t1_blg_g4_exact.json"
             wait_seconds: 55 # TODO: 55
+            duration_seconds: 1902 # 31:42초 (경기진행시간)
           g5:
             file_name: "t1_blg_g5_exact.json"
-            wait_seconds: 3182 # TODO: 3182
+            wait_seconds: 1225 # TODO: 3182-1902
+            duration_seconds: 1933  # 32분 13초 (경기진행시간)

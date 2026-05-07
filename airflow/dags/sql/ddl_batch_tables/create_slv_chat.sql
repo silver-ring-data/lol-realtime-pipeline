@@ -1,4 +1,5 @@
 CREATE EXTERNAL TABLE IF NOT EXISTS {{ params.DB }}.{{ params.TABLE_NAME }} (
+    match_id STRING,
     nickname STRING,
     content STRING,
     platform STRING,

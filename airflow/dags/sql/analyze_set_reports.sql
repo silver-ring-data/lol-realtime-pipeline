@@ -19,20 +19,21 @@ WITH event_stats AS (
 ),
 gold_stats AS (
     SELECT 
-        p_match_id as match_id,
-        CASE WHEN CAST(player_id AS INTEGER) <= 5 THEN '100' ELSE '200' END as team,
-        SUM(max_gold) as total_gold
+        p_match_id AS match_id,
+        team,
+        SUM(max_gold) AS total_gold
     FROM (
         SELECT 
-            match_id,
+            p_match_id,
             player_id,
+            CASE WHEN CAST(player_id AS INTEGER) <= 5 THEN '100' ELSE '200' END as team,
             MAX(stats.total_gold) as max_gold
         FROM {{ params.DB }}.{{ params.GAME_TABLE_NAME }}
         CROSS JOIN UNNEST(participant_frames) AS t(player_id, stats)
         WHERE p_match_id = '{{ params.match_id }}'
-        GROUP BY match_id, player_id
+        GROUP BY p_match_id, player_id
     )
-    GROUP BY match_id, CASE WHEN CAST(player_id AS INTEGER) <= 5 THEN '100' ELSE '200' END
+    GROUP BY p_match_id, team
 ),
 chat_sum AS (
     SELECT 
