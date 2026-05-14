@@ -73,7 +73,7 @@ with DAG(
         query=f"""
             ALTER TABLE {ATHENA_DB}.{TABLES['btch_slv_game']} 
             ADD IF NOT EXISTS PARTITION (p_match_id='{{{{ dag_run.conf.get('match_id') }}}}') 
-            LOCATION 's3://{BUCKET_NAME}/silver/game/match_id={{{{ dag_run.conf.get('match_id') }}}}/';
+            LOCATION 's3://{BUCKET_NAME}/silver/game/p_match_id={{{{ dag_run.conf.get('match_id') }}}}/';
         """,
         database=ATHENA_DB,
         output_location=f"s3://{BUCKET_NAME}/athena-results/",
@@ -85,7 +85,7 @@ with DAG(
         query=f"""
             ALTER TABLE {ATHENA_DB}.{TABLES['btch_slv_chat']} 
             ADD IF NOT EXISTS PARTITION (p_match_id='{{{{ dag_run.conf.get('match_id') }}}}') 
-            LOCATION 's3://{BUCKET_NAME}/silver/chat/match_id={{{{ dag_run.conf.get('match_id') }}}}/';
+            LOCATION 's3://{BUCKET_NAME}/silver/chat/p_match_id={{{{ dag_run.conf.get('match_id') }}}}/';
         """,
         database=ATHENA_DB,
         output_location=f"s3://{BUCKET_NAME}/athena-results/",

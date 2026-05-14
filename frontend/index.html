@@ -15,11 +15,12 @@
 
         <div class="screen-container">
             <div class="screen-header">
-                <div class="header-match-info">WORLDS 2024 FINAL</div>
+                <div class="header-match-info" id="match-status">WORLDS 2024 FINAL</div>
                 <div class="header-viewer-box">
                     <span class="live-tag">LIVE</span>
                     <span class="viewer-icon">👁️</span>
-                    <span id="viewer-count-display">0</span> </div>
+                    <span id="viewer-count-display">0</span> 
+                </div>
             </div>
 
             <div class="screen-area">
@@ -29,6 +30,7 @@
                         allowfullscreen></iframe>
             </div>
         </div>
+        
         <div class="side-gauge right">
             <div class="gauge-fill" id="chat-gauge" style="height: 40%; background: #f00;"></div>
         </div>
@@ -38,13 +40,9 @@
         <div id="led-text" class="led-dot-font">⏱️ ANALYZING GAME FLOW... T1 vs BLG ... HYPED UP! 🚀</div>
     </div>
 
-    <div id="audience-container">
-        </div>
+    <div id="audience-container"></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
-<script src="script.js" defer></script>
-
-
+<script src="script.js"></script>
 </body>
 </html>

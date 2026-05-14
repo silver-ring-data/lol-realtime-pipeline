@@ -24,22 +24,23 @@ resources:
     kinesis_data_firehose: # Dynamic Partitioning
       # --- 💬 채팅 데이터 (Dynamic Partitioning 적용)
       chat_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-chat"
-      # Prefix: bronze/chat/p_match_id=!{partitionKeyFromQuery:match_id}/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/
+      # Prefix: bronze/chat/p_match_id=!{partitionKeyFromQuery:p_match_id}/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/
+      # p_match_id/.match_id
       # Error : bronze/errors/chat/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
       # Buffer hints (버퍼 힌트) : 크기 1MB, 간격 60초
 
       # --- 🎮 게임 데이터 (Dynamic Partitioning 적용)
       game_brz_to_s3: "de-ai-05-lol-dev-an2-kdf-brz-game"
-      # Prefix: bronze/game/p_match_id=!{partitionKeyFromQuery:match_id}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/
+      # Prefix: bronze/game/p_match_id=!{partitionKeyFromQuery:p_match_id}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/
       # Error : bronze/errors/game/!{firehose:error-output-type}/year=!{timestamp:YYYY}/month=!{timestamp:MM}/day=!{timestamp:dd}/
       # Buffer hints (버퍼 힌트) : 크기 1MB, 간격 60초
 
       # Dynamic Partitioning: Enabled로 체크!
       # Multi-record de-aggregation: Disabled (우리 봇은 1개씩 쏘니까 상관없어).
       # New partition key:
-      # Key 이름: match_id
+      # Key 이름: p_match_id
       # JQ query: .match_id (우리 봇이 보내는 JSON 안에 match_id 필드가 있으니까!)
-      # S3 bucket prefix: 위에서 우리가 정한 match_id=...가 포함된 경로를 그대로 입력!
+      # S3 bucket prefix: 위에서 우리가 정한 p_match_id=...가 포함된 경로를 그대로 입력!
 
   processing:
     # Managed Flink (Kinesis Data Analytics)
@@ -123,6 +124,49 @@ app_context:
   refresh_interval_ms: 1000
 
 # 📚 경기 저장소: 새로운 경기가 추가될 때마다 여기에 계속 덧붙이면 돼!
+# matches:
+#   worlds_2024_final:
+#     metadata:
+#       tournament: "worlds_2024"
+#       match_date: "20241102"
+#       teams: "t1_blg"
+#     # 📺 전체 방송 타임라인 (시청자 봇이 참고할 기준)
+#     timeline:
+#       pre_game:
+#         start_seconds: 0
+#         duration: 5
+#         label: "PRE_GAME"
+#       g4:
+#         start_seconds: 5
+#         duration: 100
+#         label: "T1_BLG_G4"
+#       intermission:
+#         start_seconds: 105 # 55 + 1902
+#         duration: 20      # 우리가 계산한 20분 25초!
+#         label: "INTERMISSION"
+#       g5:
+#         start_seconds: 125 # 1957 + 1225
+#         duration: 100
+#         label: "T1_BLG_G5"
+#       post_game:
+#         start_seconds: 225
+#         duration: 20
+#         label: "POST_GAME"
+
+#     # 🎮 실제 게임 봇 실행 설정 (Airflow Relay용)
+#     data:
+#       local_path: "./data"
+#       chat_source: "t1_blg_chat.jsonl"  # 채팅은 통파일
+#       game_sets:
+#           g4:
+#             file_name: "t1_blg_g4_exact.json"
+#             wait_seconds: 5 # TODO: 55
+#             duration_seconds: 100 # 31:42초  (경기진행시간)
+#           g5:
+#             file_name: "t1_blg_g5_exact.json"
+#             wait_seconds: 20 # TODO: 3182-1902
+#             duration_seconds: 100  # 32분 13초 (경기진행시간)
+
 matches:
   worlds_2024_final:
     metadata:
@@ -160,7 +204,7 @@ matches:
           g4:
             file_name: "t1_blg_g4_exact.json"
             wait_seconds: 55 # TODO: 55
-            duration_seconds: 1902 # 31:42초 (경기진행시간)
+            duration_seconds: 1902 # 31:42초  (경기진행시간)
           g5:
             file_name: "t1_blg_g5_exact.json"
             wait_seconds: 1225 # TODO: 3182-1902
