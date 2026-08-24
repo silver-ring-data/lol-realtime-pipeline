@@ -15,6 +15,8 @@ e스포츠 중계 스트림에서 **하이라이트 순간을 실시간으로 �
 Lambda Architecture를 적용해 **Speed Layer**(즉시 반응)와 **Batch Layer**(정확한 집계)를
 분리했습니다.
 
+상세 다이어그램 원본은 [`docs/diagrams/`](docs/diagrams/)에 있습니다.
+
 ```
                         ┌──────────────────────────────────────────┐
                         │            Producers (Docker)            │
