@@ -8,6 +8,11 @@ e스포츠 중계 스트림에서 **하이라이트 순간을 실시간으로 �
 바론 스틸처럼 지표에 남는 순간뿐 아니라, 지표상 아무 일도 없지만 채팅이 폭증하는
 슈퍼플레이 구간까지 잡아내기 위해 두 신호를 함께 사용합니다.
 
+![실시간 대시보드](docs/images/dashboard.jpg)
+
+*채팅 급증 구간을 감지해 전광판에 표시하고, 시청자 수를 관중석 밀도로 시각화합니다.
+말풍선 영역은 실제 시청자 닉네임이 포함되어 있어 블러 처리했습니다.*
+
 ---
 
 ## 아키텍처
@@ -15,7 +20,9 @@ e스포츠 중계 스트림에서 **하이라이트 순간을 실시간으로 �
 Lambda Architecture를 적용해 **Speed Layer**(즉시 반응)와 **Batch Layer**(정확한 집계)를
 분리했습니다.
 
-상세 다이어그램 원본은 [`docs/diagrams/`](docs/diagrams/)에 있습니다.
+![아키텍처](docs/images/architecture.png)
+
+다이어그램 원본(draw.io)은 [`docs/diagrams/`](docs/diagrams/)에 있습니다.
 
 ```
                         ┌──────────────────────────────────────────┐
@@ -59,6 +66,20 @@ Batch Layer의 오케스트레이션은 **Airflow DAG 3개**로 구성됩니다.
 | [`2_live_ingestion_relay_dag`](airflow/dags/2_live_ingestion_relay_dag.py) | 세트별 프로듀서 기동, 종료 감지, 분석 DAG 트리거 |
 | [`3_batch_analysis_dag`](airflow/dags/3_batch_analysis_dag.py) | Glue 변환 → 파티션 등록 → 세트 분석 → 시리즈 종합 |
 
+**1. 인프라 초기화** — 이전 시그널을 정리하고 Athena 테이블을 준비한 뒤 수집 DAG를 트리거합니다.
+
+![인프라 초기화 DAG](docs/images/dag_1_infra_setup.png)
+
+**2. 수집 릴레이** — 세트별로 프로듀서를 기동하고, `S3KeySensor`가 종료 시그널을 감지하면
+분석 DAG를 트리거한 뒤 다음 세트로 넘어갑니다. 4세트 분석과 5세트 수집이 겹쳐 진행됩니다.
+
+![수집 릴레이 DAG](docs/images/dag_2_ingestion_relay.png)
+
+**3. 배치 분석** — Glue 변환 후 파티션을 등록하고 세트 리포트를 만듭니다.
+마지막 세트일 때만 분기하여 시리즈 종합 리포트를 생성합니다.
+
+![배치 분석 DAG](docs/images/dag_3_batch_analysis.png)
+
 Speed Layer는 다음 구성요소로 이루어집니다.
 
 | 구성요소 | 역할 |
@@ -66,6 +87,12 @@ Speed Layer는 다음 구성요소로 이루어집니다.
 | [`serving/flink/highlight_scoring.py`](serving/flink/highlight_scoring.py) | 슬라이딩 윈도우 기반 실시간 하이라이트 점수 산출 |
 | [`serving/lambda/os_loader.py`](serving/lambda/os_loader.py) | Gold 스트림을 OpenSearch 인덱스로 라우팅·적재 |
 | [`serving/lambda/api_handler.py`](serving/lambda/api_handler.py) | 대시보드 조회 API (GET /lol) |
+
+산출된 점수는 OpenSearch에 적재되어 시계열로 확인할 수 있습니다.
+채팅 점수(초록)가 이벤트 점수(파랑)보다 자주, 크게 튀는 것을 볼 수 있는데,
+지표에 남지 않는 반응까지 포착하려는 설계 의도가 그대로 드러나는 부분입니다.
+
+![OpenSearch 하이라이트 점수](docs/images/opensearch_scores.png)
 
 ---
 
@@ -178,7 +205,7 @@ Airflow UI에서 `1_live_infra_setup_dag`를 실행하면 이후 DAG가 순차�
 │   └── opensearch/        # 인덱스 템플릿
 ├── frontend/              # 실시간 대시보드 (정적)
 ├── scripts/               # 데이터 수집 및 전처리 유틸리티
-├── docs/aws-setup.md      # AWS 리소스 구성 가이드
+├── docs/                  # AWS 구성 가이드, 아키텍처 다이어그램, 실행 화면
 └── config/config.yaml     # 리소스 이름 및 시뮬레이션 설정
 ```
 
