@@ -1,12 +1,38 @@
-# Airflow & Docker
+# --- 자격 증명 / 환경 설정 ---
+.env
+.env.*
+!.env.example
+standalone_admin_password.txt
+*.pem
+credentials
+
+# --- Airflow / Docker 런타임 ---
 logs/
 plugins/
 postgres_data/
 airflow.cfg
 airflow.db
-standalone_admin_password.txt
-.env
 
-# Python
+# --- 로그 ---
+*.log
+
+# --- Python ---
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+
+# --- AWS CDK ---
+infra/cdk.out/
+infra/.venv/
+
+# --- 데이터 ---
+# 익명화 이전의 채팅 원본은 시청자 닉네임을 포함하므로 커밋하지 않는다.
+# 저장소에는 scripts/anonymize_chat.py로 익명화한 샘플만 포함한다.
+*_raw.jsonl
+mock_data/
+
+# --- 작업 산출물 ---
+s3_structure.txt

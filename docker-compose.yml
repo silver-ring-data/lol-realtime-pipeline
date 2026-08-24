@@ -1,0 +1,97 @@
+x-airflow-common: &airflow-common
+  
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.0}
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    # .env 파일의 자격 증명을 컨테이너 환경 변수로 주입한다 (값은 저장소에 포함하지 않는다).
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+    TZ: 'Asia/Seoul'
+    AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: 'Asia/Seoul'
+    _PIP_ADDITIONAL_REQUIREMENTS: 'pytchat requests apache-airflow-providers-amazon boto3 pyyaml'
+  volumes:
+    # 호스트 소스를 컨테이너에 마운트하여 재빌드 없이 반영한다.
+    - ./airflow/dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config:/opt/airflow/config
+    - ./plugins:/opt/airflow/plugins
+    - ./data_source:/opt/airflow/data_source
+    - ./frontend:/usr/share/nginx/html
+    - ./config:/usr/share/nginx/html/config
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+      image: postgres:13
+      container_name: lol-airflow-db
+      environment:
+        POSTGRES_USER: airflow
+        POSTGRES_PASSWORD: airflow
+        POSTGRES_DB: airflow
+      # 컨테이너를 재생성해도 메타데이터가 유지되도록 볼륨을 연결한다.
+      volumes:
+        - postgres-data:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U airflow"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+      networks:
+      - lol-network
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    container_name: lol-airflow-webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lol-network
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    container_name: lol-airflow-scheduler
+    networks:
+      - lol-network
+
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    networks:
+      - lol-network
+
+  # 실시간 대시보드 정적 호스팅
+  frontend:
+    image: nginx:alpine
+    container_name: lol-frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    networks:
+      - lol-network
+networks:
+  lol-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
