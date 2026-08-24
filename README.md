@@ -57,6 +57,14 @@ Batch Layer의 오케스트레이션은 **Airflow DAG 3개**로 구성됩니다.
 | [`2_live_ingestion_relay_dag`](airflow/dags/2_live_ingestion_relay_dag.py) | 세트별 프로듀서 기동, 종료 감지, 분석 DAG 트리거 |
 | [`3_batch_analysis_dag`](airflow/dags/3_batch_analysis_dag.py) | Glue 변환 → 파티션 등록 → 세트 분석 → 시리즈 종합 |
 
+Speed Layer는 다음 구성요소로 이루어집니다.
+
+| 구성요소 | 역할 |
+|---|---|
+| [`serving/flink/highlight_scoring.py`](serving/flink/highlight_scoring.py) | 슬라이딩 윈도우 기반 실시간 하이라이트 점수 산출 |
+| [`serving/lambda/os_loader.py`](serving/lambda/os_loader.py) | Gold 스트림을 OpenSearch 인덱스로 라우팅·적재 |
+| [`serving/lambda/api_handler.py`](serving/lambda/api_handler.py) | 대시보드 조회 API (GET /lol) |
+
 ---
 
 ## 설계에서 고민한 부분
@@ -82,7 +90,17 @@ Airflow의 논리적 실행 시각(`{{ ts }}`)을 **공통 기준점**으로 전
 `ALTER TABLE ADD PARTITION`으로 해당 세트의 파티션만 등록하여 세트 수와 무관하게
 일정한 비용을 유지했습니다.
 
-### 4. 스키마 타입 충돌
+### 4. 슬라이딩 윈도우와 하이라이트 경계
+
+텀블링 윈도우를 쓰면 하이라이트가 윈도우 경계에 걸칠 때 점수가 두 구간으로
+쪼개져 정점이 낮아집니다. `HOP` 슬라이딩 윈도우로 5초 구간을 2초마다 겹쳐
+계산해 정점을 안정적으로 포착했습니다.
+
+또한 채팅이 없는 구간에서는 워터마크가 진행되지 않아 윈도우가 닫히지 않는
+문제가 있었습니다. 게임 프레임을 점수 0짜리 하트비트 레코드로 함께 흘려보내
+시간이 계속 진행되도록 했습니다.
+
+### 5. 스키마 타입 충돌
 
 `victim_id`에 챔피언 ID(정수)와 `NEXUS DESTROYED`(문자열)가 혼재해 Glue 스키마 추론 시
 파티션별로 타입이 달라지는 문제가 있었습니다. 프로듀서 단계에서 문자열로 통일해
@@ -104,17 +122,14 @@ cp .env.example .env
 # .env를 열어 AWS 자격 증명과 Airflow 계정 정보를 입력합니다.
 ```
 
-### 2. AWS 리소스 배포
+### 2. AWS 리소스 구성
 
-```bash
-cd infra
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv/Scripts/activate
-pip install -r requirements.txt
-cdk bootstrap    # 최초 1회
-cdk deploy
-```
+Kinesis, Firehose, Glue, Athena, OpenSearch, Lambda, API Gateway를 관리 콘솔에서
+구성합니다. 필요한 설정값과 순서는 [`docs/aws-setup.md`](docs/aws-setup.md)에
+정리되어 있습니다.
 
-배포된 리소스 이름은 [`config/config.yaml`](config/config.yaml)에 반영합니다.
+생성한 리소스 이름과 API Gateway 호출 URL을
+[`config/config.yaml`](config/config.yaml)에 반영합니다.
 
 ### 3. 스택 기동
 
@@ -142,9 +157,13 @@ Airflow UI에서 `1_live_infra_setup_dag`를 실행하면 이후 DAG가 순차�
 │   ├── api_server/        # FastAPI 수집 엔드포인트
 │   └── producer/          # 게임 / 채팅 / 시청자 프로듀서
 ├── glue_jobs/             # Bronze → Silver 변환 Spark 스크립트
-├── infra/                 # AWS CDK 인프라 정의
+├── serving/               # Speed Layer
+│   ├── flink/             # 실시간 하이라이트 점수 산출 (PyFlink)
+│   ├── lambda/            # OpenSearch 적재 / 조회 API
+│   └── opensearch/        # 인덱스 템플릿
 ├── frontend/              # 실시간 대시보드 (정적)
 ├── scripts/               # 데이터 수집 및 전처리 유틸리티
+├── docs/aws-setup.md      # AWS 리소스 구성 가이드
 └── config/config.yaml     # 리소스 이름 및 시뮬레이션 설정
 ```
 
@@ -180,6 +199,9 @@ python scripts/anonymize_chat.py \
 | 저장 | S3 (Bronze / Silver / Gold), OpenSearch |
 | 처리 | AWS Glue (PySpark), Amazon Athena |
 | 서빙 | Lambda, API Gateway |
-| IaC | AWS CDK (Python) |
 | 실행 환경 | Docker Compose |
 | 애플리케이션 | FastAPI, Nginx, Vanilla JS |
+
+> AWS 리소스는 관리 콘솔에서 수동 구성했으며, 설정값을
+> [`docs/aws-setup.md`](docs/aws-setup.md)에 기록했습니다.
+> IaC(CDK/Terraform) 전환은 향후 개선 과제입니다.
