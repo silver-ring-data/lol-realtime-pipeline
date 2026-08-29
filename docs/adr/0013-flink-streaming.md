@@ -1,36 +1,43 @@
-# 0013. Flink 기반 초저지연 실시간 스트리밍 아키텍처를 도입한다
+# 0013. Flink 기반의 초저지연 실시간 스트리밍 아키텍처 도입
 
 > 원본: https://app.notion.com/p/3441198df8d98071bfc8d13995b1d339
 
-| | |
+| 상태 | 날짜 |
 |---|---|
-| 상태 | **채택** |
-| 날짜 | 2026-04-16 |
-| 결정자 | silver-ring-data |
-| 관련 | 0009, 0018, 0030 |
+| 채택 | 2026-04-16 |
 
-## 배경
+## 현상
 
-기존 설계(v0.2)는 Airflow 로 주기적으로 수집해 PostgreSQL 에 적재한 뒤 SQL 로 분석하는 방식이었다. '적재 후 분석'의 특성상 최소 수 초 이상의 지연이 발생하여, 실시간 하이라이트 탐지라는 핵심 가치를 극대화하기에 한계가 있었다.
-
-## 선택지
-
-| 선택지 | 장점 | 단점 |
-|---|---|---|
-| A. Apache Flink (In-motion 스트리밍) | 1초 미만 지연, 메모리 레벨 연산, 내장 Window API, DB 병목 해소 | 패키징·배포 복잡도, 학습 비용 |
-| B. PostgreSQL SQL (Post-processing) | 익숙함 | 수 초 이상 지연, 디스크 I/O, 복잡한 INTERVAL 조인 |
+- 기존 설계(v0.2)에서는 Airflow를 활용해 주기적으로 데이터를 수집하고, DB(PostgreSQL)에 적재한 뒤 SQL로 분석하는 방식을 고려했습니다.
+- 하지만 이 방식은 '데이터 적재 후 분석'이라는 단계적 특성상 최소 수 초 이상의 지연(Latency)이 발생하며, 실시간 하이라이트 탐지라는 프로젝트의 핵심 가치를 극대화하기에는 한계가 있었습니다.
 
 ## 결정
 
-**A 를 채택한다.** 데이터 흐름은 `Source(Kinesis) → Operator(Flink Logic) → Sink(Kinesis/Firehose)` 다.
+데이터 처리의 중심축을 Batch 중심에서 **'In-motion' 스트리밍 처리** 중심으로 전환하기 위해 **Apache Flink**를 핵심 분석 엔진으로 도입합니다.
 
-- 데이터 인입: Python 수집 모듈이 Amazon Kinesis Data Streams 로 송신한다.
-- 실시간 연산: Flink 가 Kinesis 스트림을 구독하여 경기 데이터와 채팅 데이터를 조인·분석한다. Sliding/Tumbling Window 로 "15~30초 구간의 데이터 폭증"을 메모리에서 즉시 계산한다.
-- 결과 적재: 분석 결과는 Kinesis 를 거쳐 Amazon Data Firehose 로 S3(Data Lake)에 영구 저장한다.
-- 언어·환경: Java, Scala 또는 PyFlink 를 사용하며 `.zip` 으로 패키징하여 배포한다.
+- **데이터 인입**: Python 기반의 수집 모듈이 **Amazon Kinesis Data Streams**로 데이터를 송신합니다.
+- **실시간 연산**: **Apache Flink**가 Kinesis 스트림을 직접 구독하여 실시간으로 '경기 데이터'와 '채팅 데이터'를 조인(Join)하고 분석합니다.
+- **결과 적재**: 분석된 하이라이트 결과는 다시 Kinesis를 거쳐 **Amazon Data Firehose**를 통해 **S3(Data Lake)**에 영구 저장됩니다.
 
-## 결과
+## 이유
 
-- 좋아지는 것: 사건 발생 직후 1초 이내 하이라이트 판별, DB 병목 해소, 최신 스트리밍 스택 구현 경험.
-- 감수하는 것: 배포·의존성 관리 복잡도.
-- 다시 볼 조건: 실시간 요구가 사라지거나 Flink 고정 비용(KPU)이 예산을 초과할 때.
+### 상세 설계 (Implementation Details)
+
+- **언어 및 환경**: 자바, 스칼라 또는 파이썬(PyFlink)을 활용하며, 종속성 관리를 위해 `.zip` 형태로 패키징하여 배포합니다.
+- **윈도우 연산**: Flink의 내장 기능인 **Sliding Window** 또는 **Tumbling Window**를 활용하여 "특정 15~30초 구간의 데이터 폭증"을 메모리 상에서 즉시 계산합니다.
+- **데이터 흐름**: `Source(Kinesis) -> Operator(Flink Logic) -> Sink(Kinesis/Firehose)` 구조를 가집니다.
+
+## 트레이드오프
+
+### 기대 효과 (Consequences)
+
+- **초저지연(Low Latency) 실현**: DB에 적재되기 전, 데이터가 흐르는 과정에서 연산이 완료되므로 사건 발생 직후 1초 이내에 하이라이트 판별이 가능합니다.
+- **시스템 부하 감소**: 복잡한 조인 연산을 DB(SQL)가 아닌 분산 처리 엔진인 Flink가 담당하므로 DB 성능 병목 현상을 해결할 수 있습니다.
+- **기술적 차별성**: 단순 CRUD 중심의 프로젝트를 넘어, 실제 빅테크 기업에서 사용하는 최신 스트리밍 스택을 구현함으로써 엔지니어링 역량을 증명할 수 있습니다.
+
+| 구분 | 기존 방식 (PostgreSQL SQL) | 새로운 방식 (Apache Flink) |
+|---|---|---|
+| **시점** | 데이터가 DB에 **적재된 후** (Post-processing) | 데이터가 **흐르는 도중** (In-motion) |
+| **방식** | `INTERVAL`을 활용한 복잡한 SQL 조인 | 내장된 **Window API** (Sliding/Tumbling) |
+| **지연 시간** | 수 초 이상 (Batch 성격) | **1초 미만** (초저지연) |
+| **메모리** | 디스크 I/O 발생 (느림) | **메모리 레벨**에서 연산 (매우 빠름) |
